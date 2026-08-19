@@ -13,21 +13,31 @@ async function main() {
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD || '',
     database: process.env.DB_NAME || 'datavet',
-    multipleStatements: true
+    multipleStatements: true,
   });
 
   const schemaPath = path.resolve('../database/schema.sql');
   console.log(`Reading schema from ${schemaPath}...`);
   const schemaSql = fs.readFileSync(schemaPath, 'utf8');
 
-  console.log('Applying schema statements...');
-  await conn.query(schemaSql);
-  console.log('Schema applied successfully.');
+  // Dividir por declaraciones SQL individuales
+  const statements = schemaSql
+    .split(';')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
 
+  console.log(`Applying ${statements.length} schema statements...`);
+  for (const stmt of statements) {
+    if (stmt) {
+      await conn.query(stmt);
+    }
+  }
+
+  console.log('Schema applied successfully.');
   await conn.end();
 }
 
-main().catch(err => {
-  console.error('Error:', err);
+main().catch((err) => {
+  console.error('Error applying schema:', err.message);
   process.exit(1);
 });

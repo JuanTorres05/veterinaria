@@ -1,0 +1,11 @@
+# Node / npm
+node_modules/
+npm-debug.log*
+
+# Expo
+.expo/
+.expo-shared/
+
+# Env
+.env
+.env.local

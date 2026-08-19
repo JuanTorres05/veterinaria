@@ -11,7 +11,6 @@ const INSECURE_SECRETS = new Set(['', 'replace_me', 'dev_secret_change_me']);
 const jwtSecret = process.env.JWT_SECRET ?? '';
 
 // Si estamos en producción y el secreto es débil, cortamos el arranque del servidor
-// Esto evita subir a producción con credenciales de desarrollo por descuido
 if (process.env.NODE_ENV === 'production' && INSECURE_SECRETS.has(jwtSecret)) {
   throw new Error(
     '[config] JWT_SECRET no está definido o usa un valor inseguro. ' +
@@ -20,12 +19,11 @@ if (process.env.NODE_ENV === 'production' && INSECURE_SECRETS.has(jwtSecret)) {
 }
 
 // Exportamos todo en un solo objeto para acceder desde cualquier parte del proyecto
-// En vez de process.env.DB_HOST en cada archivo, usamos env.db.host
 export const env = {
   port: Number(process.env.PORT || 3000),
   nodeEnv: process.env.NODE_ENV || 'development',
   db: {
-    host: process.env.DB_HOST || 'localhost',
+    host: process.env.DB_HOST || '127.0.0.1',
     port: Number(process.env.DB_PORT || 3306),
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD || '',
