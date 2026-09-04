@@ -1,16 +1,15 @@
-﻿import { Link, useNavigate, useLocation, Outlet } from "react-router-dom";
+import { Link, useNavigate, useLocation, Outlet } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { useEffect, useRef, useState } from "react";
 import { 
   House, 
   Calendar, 
   UserPlus, 
   ChartBar, 
   SignOut, 
-  MagnifyingGlass,
   ClipboardText,
   Monitor,
-  PawPrint
+  PawPrint,
+  UsersThree
 } from "@phosphor-icons/react";
 
 const NAV_ITEMS = [
@@ -19,26 +18,14 @@ const NAV_ITEMS = [
   { to: "/monitoreo", label: "Monitoreo", icon: Monitor,       roles: ["admin", "veterinario", "recepcionista"] },
   { to: "/pacientes", label: "Pacientes", icon: ClipboardText, roles: ["admin", "veterinario", "recepcionista"] },
   { to: "/registrar", label: "Registrar", icon: UserPlus,      roles: ["admin", "recepcionista"] },
-  { to: "/reportes",  label: "Reportes",  icon: ChartBar,      roles: ["admin", "veterinario"] },
+  { to: "/reportes",  label: "Reportes",  icon: ChartBar,      roles: ["admin"] },
+  { to: "/usuarios",  label: "Usuarios",  icon: UsersThree,    roles: ["admin"] },
 ];
 
 export default function Layout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const searchInputRef = useRef(null);
-  const [searchTerm, setSearchTerm] = useState("");
-
-  useEffect(() => {
-    function handleKeyDown(e) {
-      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
-        e.preventDefault();
-        searchInputRef.current?.focus();
-      }
-    }
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
 
   function handleLogout() {
     logout();
@@ -47,50 +34,49 @@ export default function Layout() {
 
   const mainLinks = NAV_ITEMS.filter((item) => item.roles.includes(user?.rol));
 
+  // Obtener el módulo activo actual para mostrar en la cabecera
+  const currentModule = NAV_ITEMS.find((item) => 
+    location.pathname === item.to || location.pathname.startsWith(item.to + "/")
+  )?.label || "Panel Clínico";
+
   return (
-    <div className="flex h-screen overflow-hidden antialiased" style={{ backgroundColor: "var(--color-bg)", color: "var(--color-text)" }}>
+    <div className="flex h-screen overflow-hidden antialiased bg-slate-50 text-slate-900">
       
-      {/* Sidebar */}
-      <aside className="w-[60px] lg:w-[260px] flex flex-col flex-shrink-0 z-20 border-r"
-        style={{ backgroundColor: "var(--color-primary)", borderColor: "var(--color-primary-dk)" }}>
+      {/* Sidebar — Unificado con la Paleta Navy/Slate #0F172A de la Marca */}
+      <aside className="w-[60px] lg:w-[250px] flex flex-col flex-shrink-0 z-20 border-r border-slate-800 bg-[#0F172A] text-slate-100">
         
-        {/* Logo */}
-        <div className="h-14 flex items-center px-3 lg:px-5 border-b flex-shrink-0"
-          style={{ borderColor: "rgba(255,255,255,0.08)" }}>
+        {/* Logo de la Clínica */}
+        <div className="h-14 flex items-center px-3 lg:px-5 border-b border-slate-800 flex-shrink-0">
           <Link to="/dashboard" className="flex items-center gap-3 w-full min-w-0">
-            <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
-              style={{ backgroundColor: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.15)" }}>
-              <PawPrint size={16} weight="fill" color="white" />
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-b from-cyan-600 to-sky-700 flex items-center justify-center flex-shrink-0 shadow-sm">
+              <PawPrint size={18} weight="fill" className="text-white" />
             </div>
-            <span className="font-bold text-sm hidden lg:inline text-white truncate"
-              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: "-0.02em" }}>
+            <span className="font-extrabold text-base hidden lg:inline text-white truncate tracking-tight">
               DataVet
             </span>
           </Link>
         </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
-          <p className="hidden lg:block px-3 pt-4 pb-2 text-[9px] font-semibold uppercase tracking-[0.12em]"
-            style={{ color: "rgba(255,255,255,0.4)", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-            Menu
+        {/* Menú de Navegación Principal */}
+        <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
+          <p className="hidden lg:block px-3 pt-3 pb-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+            Navegación
           </p>
           {mainLinks.map((item) => {
             const active = location.pathname === item.to || location.pathname.startsWith(item.to + "/");
             const Icon = item.icon;
             return (
-              <Link key={item.label} to={item.to} title={item.label}
-                className="flex items-center gap-3 rounded-xl select-none active:scale-[0.97]"
-                style={{
-                  padding: "9px 12px",
-                  backgroundColor: active ? "rgba(255,255,255,0.12)" : "transparent",
-                  color: active ? "white" : "rgba(255,255,255,0.65)",
-                  fontWeight: active ? "600" : "500",
-                  transition: "all 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
-                }}>
-                <Icon size={18} weight={active ? "fill" : "regular"} style={{ flexShrink: 0 }} />
-                <span className="hidden lg:inline text-sm truncate"
-                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              <Link 
+                key={item.label} 
+                to={item.to} 
+                title={item.label}
+                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all select-none ${
+                  active 
+                    ? "bg-sky-500/15 text-sky-400 font-bold border-l-2 border-sky-400" 
+                    : "text-slate-300 hover:text-white hover:bg-slate-800/60 font-medium"
+                }`}>
+                <Icon size={18} weight={active ? "fill" : "regular"} className="flex-shrink-0" />
+                <span className="hidden lg:inline text-sm truncate">
                   {item.label}
                 </span>
               </Link>
@@ -98,83 +84,94 @@ export default function Layout() {
           })}
         </nav>
 
-        {/* Bottom: User + Logout */}
-        <div className="border-t p-2 flex-shrink-0" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
-          <div className="hidden lg:flex items-center gap-2.5 px-2 py-2 rounded-xl mb-1">
-            <div className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0"
-              style={{ backgroundColor: "rgba(255,255,255,0.15)", color: "white", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              {user?.nombre?.charAt(0)?.toUpperCase() || "U"}
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs font-semibold text-white truncate leading-tight"
-                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                {user?.nombre}
-              </p>
-              <span className="text-[9px] font-bold uppercase tracking-widest"
-                style={{ color: "rgba(255,255,255,0.45)" }}>
-                {user?.rol}
-              </span>
-            </div>
-          </div>
-          <button onClick={handleLogout} title="Cerrar sesion"
-            className="flex items-center gap-2.5 w-full rounded-xl transition-all active:scale-[0.97]"
-            style={{ padding: "9px 12px", color: "rgba(255,255,255,0.55)", fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: "13px", fontWeight: "500", transition: "all 0.25s ease" }}>
-            <SignOut size={16} style={{ flexShrink: 0 }} />
-            <span className="hidden lg:inline">Salir</span>
+        {/* Pie de Sidebar — Solo botón de salida */}
+        <div className="border-t border-slate-800 p-2 flex-shrink-0">
+          <button 
+            onClick={handleLogout} 
+            title="Cerrar sesión"
+            className="flex items-center gap-3 w-full rounded-xl px-3 py-2.5 text-slate-400 hover:text-rose-400 hover:bg-rose-950/20 transition-all text-sm font-semibold">
+            <SignOut size={18} className="flex-shrink-0" />
+            <span className="hidden lg:inline">Cerrar Sesión</span>
           </button>
         </div>
       </aside>
 
-      {/* Main */}
+      {/* ÁREA PRINCIPAL DE CONTENIDO */}
       <div className="flex flex-col flex-1 overflow-hidden min-w-0">
         
-        {/* Header */}
-        <header className="h-14 flex items-center justify-between px-5 flex-shrink-0 z-10 border-b"
-          style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
+        {/* Header Superior Limpio y Sobrio (Sin Barra de Búsqueda Redundante) */}
+        <header className="h-14 flex items-center justify-between px-5 flex-shrink-0 z-10 border-b border-slate-200 bg-white shadow-xs">
           
-          <div className="relative flex items-center min-w-[220px] max-w-[360px] flex-1">
-            <MagnifyingGlass size={15} className="absolute left-3" style={{ color: "var(--color-muted)" }} />
-            <input
-              ref={searchInputRef}
-              type="text"
-              placeholder="Buscar paciente, dueno o cita..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full h-9 pl-9 pr-12 text-sm rounded-xl border"
-              style={{ backgroundColor: "var(--color-primary-lt)", borderColor: "transparent", color: "var(--color-text)", outline: "none", fontFamily: "'Inter', sans-serif" }}
-              onFocus={e => { e.target.style.backgroundColor = "white"; e.target.style.borderColor = "var(--color-primary)"; e.target.style.boxShadow = "0 0 0 3px rgba(29,75,88,0.08)"; }}
-              onBlur={e => { e.target.style.backgroundColor = "var(--color-primary-lt)"; e.target.style.borderColor = "transparent"; e.target.style.boxShadow = "none"; }}
-            />
-            <kbd className="absolute right-3 hidden sm:inline-flex items-center px-1.5 py-0.5 text-[9px] font-semibold rounded select-none"
-              style={{ color: "var(--color-muted)", backgroundColor: "var(--color-border)", border: "1px solid var(--color-border)" }}>
-              ⌘K
-            </kbd>
+          {/* Módulo Activo / Identidad del Sistema */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-extrabold uppercase tracking-wider text-slate-400">
+              DataVet
+            </span>
+            <span className="text-slate-300">•</span>
+            <span className="text-xs font-bold text-slate-700">
+              {currentModule}
+            </span>
           </div>
 
-          <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl border ml-4"
-            style={{ backgroundColor: "var(--color-primary-lt)", borderColor: "var(--color-border)" }}>
-            <div className="w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold"
-              style={{ backgroundColor: "var(--color-primary)", color: "white", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              {user?.nombre?.charAt(0)?.toUpperCase() || "U"}
+          {/* Única Representación del Usuario en Todo el Sistema (Avatar + Nombre + Rol) */}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50/80">
+              <div className="w-7 h-7 rounded-lg bg-sky-600 text-white font-bold text-xs flex items-center justify-center flex-shrink-0 shadow-xs">
+                {user?.nombre?.charAt(0)?.toUpperCase() || "U"}
+              </div>
+              <div className="hidden sm:block text-left">
+                <p className="text-xs font-bold text-slate-900 leading-tight truncate max-w-[120px]">
+                  {user?.nombre}
+                </p>
+                <span className="text-[9px] font-bold uppercase tracking-wider text-sky-700">
+                  {user?.rol}
+                </span>
+              </div>
             </div>
-            <div>
-              <p className="text-xs font-semibold leading-tight truncate max-w-[110px]"
-                style={{ color: "var(--color-text)", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                {user?.nombre}
-              </p>
-              <span className="text-[9px] font-bold uppercase tracking-wider" style={{ color: "var(--color-muted)" }}>
-                {user?.rol}
-              </span>
-            </div>
+
+            <button 
+              onClick={handleLogout} 
+              title="Cerrar sesión"
+              className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition-all">
+              <SignOut size={18} />
+            </button>
           </div>
         </header>
 
-        {/* Page Content */}
-        <main className="flex-1 overflow-y-auto p-6 lg:p-8" style={{ backgroundColor: "var(--color-bg)" }}>
-          <Outlet />
+        {/* Contenido de la Página con Huellas Vibrantes de Fondo */}
+        <main className="flex-1 overflow-y-auto p-6 lg:p-8 relative bg-slate-50">
+          
+          {/* Huellas decorativas globales de fondo (Color Cyan/Sky vibrante con 20-25% opacidad) */}
+          <div className="fixed top-12 left-10 pointer-events-none opacity-[0.22] z-0 text-cyan-600 rotate-[-22deg]">
+            <PawPrint size={130} weight="fill" />
+          </div>
+          <div className="fixed top-36 right-16 pointer-events-none opacity-[0.20] z-0 text-sky-600 rotate-[18deg]">
+            <PawPrint size={170} weight="fill" />
+          </div>
+          <div className="fixed top-1/2 left-16 -translate-y-1/2 pointer-events-none opacity-[0.18] z-0 text-teal-600 rotate-[35deg]">
+            <PawPrint size={110} weight="fill" />
+          </div>
+          <div className="fixed top-1/2 right-24 -translate-y-1/2 pointer-events-none opacity-[0.22] z-0 text-cyan-600 rotate-[-15deg]">
+            <PawPrint size={150} weight="fill" />
+          </div>
+          <div className="fixed bottom-12 left-28 pointer-events-none opacity-[0.24] z-0 text-sky-600 rotate-[12deg]">
+            <PawPrint size={180} weight="fill" />
+          </div>
+          <div className="fixed bottom-8 right-12 pointer-events-none opacity-[0.25] z-0 text-cyan-600 rotate-[-25deg]">
+            <PawPrint size={220} weight="fill" />
+          </div>
+          <div className="fixed top-1/3 left-1/3 pointer-events-none opacity-[0.16] z-0 text-teal-600 rotate-[5deg]">
+            <PawPrint size={95} weight="fill" />
+          </div>
+          <div className="fixed bottom-1/3 right-1/3 pointer-events-none opacity-[0.16] z-0 text-sky-600 rotate-[-8deg]">
+            <PawPrint size={105} weight="fill" />
+          </div>
+
+          <div className="relative z-10">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>
   );
 }
-

@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import {
@@ -15,18 +15,21 @@ import {
   User,
   Warning,
   Circle,
+  Phone,
+  CalendarBlank
 } from '@phosphor-icons/react';
 
-/* â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Helpers ───────────────────────────────────────────────────────────── */
 function renderSpeciesIcon(especie) {
   const e = (especie || '').toLowerCase();
-  if (e.includes('perro') || e.includes('canino')) return <Dog size={22} weight="duotone" />;
-  if (e.includes('gato') || e.includes('felino')) return <Cat size={22} weight="duotone" />;
-  if (e.includes('ave') || e.includes('loro') || e.includes('pÃ¡jaro')) return <Bird size={22} weight="duotone" />;
-  return <PawPrint size={22} weight="duotone" />;
+  if (e.includes('perro') || e.includes('canino')) return <Dog size={22} weight="fill" className="text-sky-600" />;
+  if (e.includes('gato') || e.includes('felino')) return <Cat size={22} weight="fill" className="text-emerald-600" />;
+  if (e.includes('ave') || e.includes('loro') || e.includes('pájaro')) return <Bird size={22} weight="fill" className="text-amber-600" />;
+  return <PawPrint size={22} weight="fill" className="text-indigo-600" />;
 }
 
 function formatHora(fechaHora) {
+  if (!fechaHora) return '';
   return new Date(fechaHora).toLocaleTimeString('es-CO', {
     hour: '2-digit',
     minute: '2-digit',
@@ -34,205 +37,210 @@ function formatHora(fechaHora) {
   });
 }
 
-function formatFecha(fechaHora) {
-  return new Date(fechaHora).toLocaleDateString('es-CO', {
+function formatFecha(d) {
+  return new Date(d).toLocaleDateString('es-CO', {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
+    year: 'numeric'
   });
 }
 
-/* â”€â”€â”€ LiveIndicator â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-function LiveIndicator({ segundos }) {
+/* ── Indicator aislado sin causar re-render global cada segundo ─────────── */
+function LiveIndicator({ onRefresh, isRefreshing }) {
+  const [seconds, setSeconds] = useState(30);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setSeconds((prev) => {
+        if (prev <= 1) {
+          onRefresh(true); // disparo automático en segundo plano
+          return 30;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [onRefresh]);
+
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl border border-emerald-200 bg-emerald-50/80">
       <span className="relative flex h-2.5 w-2.5">
-        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500" />
+        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
       </span>
-      <span className="text-[10px] font-bold text-green-600 uppercase tracking-wider">
-        En vivo Â· actualiza en {segundos}s
+      <span className="text-xs font-bold text-emerald-800 tracking-tight">
+        {isRefreshing ? 'Actualizando datos...' : `En vivo • actualiza en ${seconds}s`}
       </span>
     </div>
   );
 }
 
-/* â”€â”€â”€ CitaCard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── CitaCard Con Botón Cancelar Discreto (Baja Prominencia) ────────────── */
 function CitaCard({ cita, onCambiarEstado, loadingId, userRol }) {
   const isPendiente = cita.estado === 'pendiente';
-  const isAtendida = cita.estado === 'atendida';
+  const isAtendida  = cita.estado === 'atendida';
   const isCancelada = cita.estado === 'cancelada';
-  const isLoading = loadingId === cita.id;
+  const isLoading   = loadingId === cita.id;
 
-  const puedeAtender = ['admin', 'veterinario', 'recepcionista'].includes(userRol);
+  const puedeAtender  = ['admin', 'veterinario', 'recepcionista'].includes(userRol);
   const puedeCancelar = ['admin', 'recepcionista'].includes(userRol);
 
+  function handleCancelarClick() {
+    if (window.confirm(`¿Confirma que desea cancelar la cita de ${cita.mascota_nombre}?`)) {
+      onCambiarEstado(cita.id, 'cancelada');
+    }
+  }
+
   return (
-    <div
-      className={`bezel-card-outer transition-all duration-500 ${
-        isCancelada ? 'opacity-50' : ''
-      }`}
-    >
-      <div className="">
-        <div className="flex items-start gap-3">
-          {/* Icono especie */}
-          <div
-            className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 border ${
-              isPendiente
-                ? 'bg-[#FFF4E0] text-[#A86A00] border-[#FFE3B3]'
-                : isAtendida
-                ? 'bg-[#EBF5EF] text-[#2E7D52] border-[#C7E2D2]'
-                : 'bg-[#FDECEA] text-[#C0392B] border-[#F5C6C2]'
-            }`}
-          >
-            {renderSpeciesIcon(cita.especie)}
-          </div>
-
-          {/* Info central */}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between gap-2 flex-wrap">
-              <div>
-                <p className="font-bold text-[#1A2B30] text-sm leading-tight">
-                  {cita.mascota_nombre}
-                  <span className="text-[#5C7078] font-normal text-xs ml-1.5">
-                    ({cita.especie})
-                  </span>
-                </p>
-                <p className="text-xs text-[#5C7078] mt-0.5 flex items-center gap-1">
-                  <User size={11} />
-                  {cita.cliente_nombre}
-                  {cita.telefono && (
-                    <span className="text-[#5C7078] ml-1">Â· {cita.telefono}</span>
-                  )}
-                </p>
-              </div>
-
-              {/* Hora */}
-              <div className="flex items-center gap-1.5 bg-[#F0F7F9] border border-[#C2DCE2] rounded-lg px-2.5 py-1 flex-shrink-0">
-                <Clock size={12} className="text-[#2A6B7C]" />
-                <span className="text-xs font-bold text-[#2A6B7C]">
-                  {formatHora(cita.fecha_hora)}
-                </span>
-              </div>
-            </div>
-
-            {/* Motivo */}
-            <p className="text-xs text-[#5C7078] mt-2 leading-relaxed line-clamp-2">
-              <span className="font-semibold text-[#1A2B30]">Motivo:</span> {cita.motivo}
-            </p>
-
-            {/* Veterinario */}
-            <div className="flex items-center gap-1.5 mt-2">
-              <Stethoscope size={11} className="text-[#5C7078]" />
-              <span className="text-[10px] text-[#5C7078]">
-                {cita.veterinario_nombre}
-              </span>
-            </div>
-          </div>
+    <div className={`bg-white border rounded-2xl p-5 shadow-xs transition-all ${
+      isCancelada ? 'opacity-55 border-slate-200 bg-slate-50' : 'border-slate-200 hover:shadow-md'
+    }`}>
+      <div className="flex items-start gap-3.5">
+        {/* Icono Especie */}
+        <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 border ${
+          isPendiente
+            ? 'bg-amber-50 border-amber-200'
+            : isAtendida
+            ? 'bg-emerald-50 border-emerald-200'
+            : 'bg-rose-50 border-rose-200'
+        }`}>
+          {renderSpeciesIcon(cita.especie)}
         </div>
 
-        {/* Acciones */}
-        {isPendiente && (
-          <div className="flex gap-2 mt-4 pt-3 border-t border-[#F0F2F4]">
-            {puedeAtender && (
-              <button
-                onClick={() => onCambiarEstado(cita.id, 'atendida')}
-                disabled={isLoading}
-                className="flex-1 flex items-center justify-center gap-2 h-9 rounded-xl text-xs font-semibold bg-[#EBF5EF] text-[#2E7D52] border border-[#C7E2D2] hover:bg-[#D6EDE0] transition-all duration-300 active:scale-[0.97] disabled:opacity-50"
-              >
-                <CheckCircle size={14} weight="fill" />
-                {isLoading ? 'Guardando...' : 'Marcar atendida'}
-              </button>
-            )}
-            {puedeCancelar && (
-              <button
-                onClick={() => onCambiarEstado(cita.id, 'cancelada')}
-                disabled={isLoading}
-                className="flex items-center justify-center gap-1.5 h-9 px-3 rounded-xl text-xs font-semibold bg-[#FDECEA] text-[#C0392B] border border-[#F5C6C2] hover:bg-[#FAD4D0] transition-all duration-300 active:scale-[0.97] disabled:opacity-50"
-              >
-                <XCircle size={14} weight="fill" />
-                Cancelar
-              </button>
-            )}
-          </div>
-        )}
+        {/* Info Paciente y Propietario */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <p className="font-extrabold text-slate-900 text-sm leading-tight">
+                {cita.mascota_nombre}
+                <span className="text-slate-400 font-normal text-xs ml-1.5">
+                  ({cita.especie})
+                </span>
+              </p>
+              <p className="text-xs text-slate-500 mt-1 flex items-center gap-1 font-medium">
+                <User size={12} className="text-slate-400 flex-shrink-0" />
+                {cita.cliente_nombre}
+                {cita.telefono && (
+                  <span className="text-slate-400 ml-1">
+                    • Tel: {cita.telefono}
+                  </span>
+                )}
+              </p>
+            </div>
 
-        {/* Badge estado si no es pendiente */}
-        {!isPendiente && (
-          <div className="mt-3 pt-3 border-t border-[#F0F2F4] flex items-center gap-2">
-            {isAtendida ? (
-              <span className="badge-green flex items-center gap-1.5">
-                <CheckCircle size={11} weight="fill" /> Atendida
+            {/* Hora Programada */}
+            <div className="flex items-center gap-1.5 bg-sky-50 border border-sky-200 rounded-lg px-2.5 py-1 flex-shrink-0">
+              <Clock size={13} className="text-sky-600" />
+              <span className="text-xs font-bold text-sky-800">
+                {formatHora(cita.fecha_hora)}
               </span>
-            ) : (
-              <span className="badge-red flex items-center gap-1.5">
-                <XCircle size={11} weight="fill" /> Cancelada
-              </span>
-            )}
+            </div>
           </div>
-        )}
+
+          {/* Motivo de Consulta */}
+          <p className="text-xs text-slate-600 mt-2.5 leading-relaxed">
+            <span className="font-bold text-slate-800">Motivo:</span> {cita.motivo}
+          </p>
+
+          {/* Veterinario Asignado */}
+          <div className="flex items-center gap-1.5 mt-2 text-slate-500">
+            <Stethoscope size={13} className="text-sky-600 flex-shrink-0" />
+            <span className="text-xs font-semibold">
+              Dr(a). {cita.veterinario_nombre}
+            </span>
+          </div>
+        </div>
       </div>
+
+      {/* Acciones para Citas Pendientes — Cancelar tiene baja prominencia visual */}
+      {isPendiente && (
+        <div className="flex items-center justify-between gap-2 mt-4 pt-3 border-t border-slate-100">
+          {puedeAtender && (
+            <button
+              onClick={() => onCambiarEstado(cita.id, 'atendida')}
+              disabled={isLoading}
+              className="btn-action-nav flex-1 justify-center h-9 text-xs">
+              <CheckCircle size={15} weight="bold" />
+              <span>{isLoading ? 'Guardando...' : 'Marcar Atendida'}</span>
+            </button>
+          )}
+
+          {/* Botón Cancelar sutil / discreto de baja prominencia para evitar clics accidentales */}
+          {puedeCancelar && (
+            <button
+              onClick={handleCancelarClick}
+              disabled={isLoading}
+              title="Cancelar esta cita de forma irreversible"
+              className="px-3 py-1.5 h-9 rounded-xl text-xs font-semibold text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-transparent transition-all flex items-center gap-1 opacity-70 hover:opacity-100">
+              <XCircle size={15} />
+              <span>Cancelar Cita</span>
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Estado final si fue Atendida o Cancelada */}
+      {!isPendiente && (
+        <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between">
+          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Estado actual</span>
+          {isAtendida ? (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">
+              <CheckCircle size={13} weight="fill" /> Atendida
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold bg-rose-100 text-rose-800 border border-rose-200">
+              <XCircle size={13} weight="fill" /> Cancelada
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
-/* â”€â”€â”€ Componente principal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-const REFRESH_INTERVAL = 30;
-
+/* ── Componente Principal ────────────────────────────────────────────────── */
 export default function MonitoreoPage() {
   const { user } = useAuth();
   const [citas, setCitas] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [loadingId, setLoadingId] = useState(null);
-  const [segundos, setSegundos] = useState(REFRESH_INTERVAL);
   const [ultimaActualizacion, setUltimaActualizacion] = useState(null);
-  const timerRef = useRef(null);
-  const countdownRef = useRef(null);
 
-  const hoy = new Date().toISOString().split('T')[0];
+  const hoyStr = (() => {
+    const t = new Date();
+    return new Date(t - t.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  })();
 
   const loadCitas = useCallback(async (silencioso = false) => {
     try {
       if (!silencioso) setLoading(true);
+      else setIsRefreshing(true);
+      
       setError('');
-      // Cargamos TODAS las citas de hoy (pendientes + atendidas + canceladas)
-      const res = await api.get(`/citas?fecha=${hoy}`);
+      const res = await api.get(`/citas?fecha=${hoyStr}`);
       setCitas(res.data);
       setUltimaActualizacion(new Date());
-      setSegundos(REFRESH_INTERVAL);
     } catch (err) {
       console.error(err);
-      setError('No se pudieron cargar las citas. Verifica que el servidor estÃ© activo.');
+      setError('No se pudieron cargar las citas del monitoreo en vivo.');
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
-  }, [hoy]);
+  }, [hoyStr]);
 
-  // Auto-refresh cada 30s
   useEffect(() => {
-    loadCitas();
-
-    timerRef.current = setInterval(() => loadCitas(true), REFRESH_INTERVAL * 1000);
-
-    countdownRef.current = setInterval(() => {
-      setSegundos((s) => {
-        if (s <= 1) return REFRESH_INTERVAL;
-        return s - 1;
-      });
-    }, 1000);
-
-    return () => {
-      clearInterval(timerRef.current);
-      clearInterval(countdownRef.current);
-    };
+    loadCitas(false);
   }, [loadCitas]);
 
   async function handleCambiarEstado(citaId, nuevoEstado) {
     try {
       setLoadingId(citaId);
       await api.patch(`/citas/${citaId}/estado`, { estado: nuevoEstado });
-      // Actualizar en el estado local sin refetch
       setCitas((prev) =>
         prev.map((c) => (c.id === citaId ? { ...c, estado: nuevoEstado } : c))
       );
@@ -245,121 +253,119 @@ export default function MonitoreoPage() {
   }
 
   const citasPendientes = citas.filter((c) => c.estado === 'pendiente');
-  const citasAtendidas = citas.filter((c) => c.estado === 'atendida');
+  const citasAtendidas  = citas.filter((c) => c.estado === 'atendida');
   const citasCanceladas = citas.filter((c) => c.estado === 'cancelada');
 
   return (
-    <div className="space-y-8  animate-fade-in">
+    <div className="space-y-7 animate-fade-in pb-6">
 
-      {/* â”€â”€ Header â”€â”€ */}
-      <div className="card">
-        <div className=" flex items-center justify-between flex-wrap gap-4">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-[#F0F7F9] text-[#2A6B7C] border border-[#C2DCE2]">
-              <Monitor size={24} weight="duotone" />
-            </div>
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-[#5C7078]">
+      {/* Barrita de progreso durante auto-refresh silencioso */}
+      {isRefreshing && (
+        <div className="fixed top-0 left-0 right-0 h-1 bg-sky-600 animate-pulse z-50" />
+      )}
+
+      {/* ── Cabecera Principal ── */}
+      <div className="flex items-center justify-between flex-wrap gap-4 pb-2 border-b border-slate-200">
+        <div className="flex items-center gap-3.5">
+          <div className="w-11 h-11 rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-sky-600 shadow-xs">
+            <Monitor size={22} weight="fill" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                Monitoreo en Tiempo Real
+              </span>
+              <span className="text-slate-300">•</span>
+              <span className="text-xs font-semibold text-slate-500 capitalize">
                 {formatFecha(new Date())}
-              </p>
-              <h1 className="text-xl font-bold text-[#1A2B30] tracking-tight">
-                Monitoreo de Pacientes
-              </h1>
-              {ultimaActualizacion && (
-                <p className="text-xs text-[#5C7078] mt-0.5">
-                  Actualizado:{' '}
-                  {ultimaActualizacion.toLocaleTimeString('es-CO', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit',
-                  })}
-                </p>
-              )}
+              </span>
             </div>
+            <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">
+              Flujo de Atención Médica
+            </h1>
           </div>
+        </div>
 
-          <div className="flex items-center gap-4 flex-wrap">
-            <LiveIndicator segundos={segundos} />
-            <button
-              onClick={() => loadCitas()}
-              disabled={loading}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold text-[#2A6B7C] border border-[#C2DCE2] bg-[#F0F7F9] hover:bg-[#E0EEF2] transition-all duration-300 active:scale-[0.97] disabled:opacity-50"
-            >
-              <ArrowClockwise size={14} className={loading ? 'animate-spin' : ''} />
-              Actualizar
-            </button>
-          </div>
+        <div className="flex items-center gap-3 flex-wrap">
+          <LiveIndicator onRefresh={loadCitas} isRefreshing={isRefreshing} />
+          <button
+            onClick={() => loadCitas(false)}
+            disabled={loading || isRefreshing}
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition-all active:scale-[0.98] disabled:opacity-50 shadow-xs">
+            <ArrowClockwise size={14} className={loading || isRefreshing ? 'animate-spin text-sky-600' : 'text-slate-500'} />
+            <span>Actualizar Ahora</span>
+          </button>
         </div>
       </div>
 
-      {/* â”€â”€ KPIs del dÃ­a â”€â”€ */}
-      <div className="grid grid-cols-3 gap-4">
+      {/* ── Tarjetas Resumen KPI del Día ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
-          { label: 'En espera', value: citasPendientes.length, color: '#A86A00', bg: '#FFF4E0', border: '#FFE3B3', icon: Clock },
-          { label: 'Atendidas', value: citasAtendidas.length, color: '#2E7D52', bg: '#EBF5EF', border: '#C7E2D2', icon: CheckCircle },
-          { label: 'Canceladas', value: citasCanceladas.length, color: '#C0392B', bg: '#FDECEA', border: '#F5C6C2', icon: XCircle },
-        ].map(({ label, value, color, bg, border, icon }) => {
-          const IconComponent = icon;
-          return (
-            <div key={label} className="card">
-              <div className=" flex items-center gap-3">
-                <div
-                  className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 border"
-                  style={{ backgroundColor: bg, color, borderColor: border }}
-                >
-                  <IconComponent size={20} weight="duotone" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-[#1A2B30] leading-none">{loading ? 'Â·' : value}</p>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-[#5C7078] mt-1">{label}</p>
-                </div>
+          { label: 'Pacientes en Espera', value: citasPendientes.length, accent: 'text-amber-600', bg: 'bg-amber-50 border-amber-200', icon: Clock },
+          { label: 'Citas Atendidas Hoy', value: citasAtendidas.length, accent: 'text-emerald-600', bg: 'bg-emerald-50 border-emerald-200', icon: CheckCircle },
+          { label: 'Citas Canceladas', value: citasCanceladas.length, accent: 'text-rose-600', bg: 'bg-rose-50 border-rose-200', icon: XCircle },
+        ].map(({ label, value, accent, bg, icon: IconComponent }) => (
+          <div key={label} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center border ${bg} ${accent}`}>
+                <IconComponent size={20} weight="fill" />
+              </div>
+              <div>
+                <p className="text-2xl font-extrabold text-slate-900 leading-none">
+                  {loading ? <span className="inline-block w-8 h-6 bg-slate-200 animate-pulse rounded" /> : value}
+                </p>
+                <p className="text-xs font-semibold text-slate-500 mt-1">{label}</p>
               </div>
             </div>
-          );
-        })}
+          </div>
+        ))}
       </div>
 
-      {/* â”€â”€ Error â”€â”€ */}
+      {/* ── Error Banner ── */}
       {error && (
-        <div className="alert-error">
-          <Warning size={18} weight="fill" className="flex-shrink-0" />
+        <div className="flex items-center gap-3 p-4 rounded-xl border border-rose-200 bg-rose-50 text-rose-800 text-sm font-semibold">
+          <Warning size={18} weight="bold" className="flex-shrink-0 text-rose-600" />
           <span>{error}</span>
         </div>
       )}
 
-      {/* â”€â”€ Citas pendientes â”€â”€ */}
+      {/* ── Seccion: Pacientes en Espera ── */}
       <div>
-        <div className="flex items-center gap-3 mb-4">
-          <h2 className="section-title mb-0">Pacientes en espera</h2>
+        <div className="flex items-center gap-2.5 mb-3.5">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+            Pacientes en Espera
+          </h2>
           {citasPendientes.length > 0 && (
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#FFF4E0] text-[#A86A00] border border-[#FFE3B3]">
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-800 border border-amber-200">
               {citasPendientes.length}
             </span>
           )}
         </div>
 
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {[1, 2, 3].map((k) => (
-              <div key={k} className="card">
-                <div className=" h-36 animate-pulse bg-[#F0F2F4] rounded-[calc(1.75rem-0.375rem)]" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {[1, 2].map((k) => (
+              <div key={k} className="bg-white border border-slate-200 rounded-2xl p-5 space-y-3 animate-pulse">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-slate-200" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-4 bg-slate-200 rounded w-1/2" />
+                    <div className="h-3 bg-slate-200 rounded w-1/3" />
+                  </div>
+                </div>
               </div>
             ))}
           </div>
         ) : citasPendientes.length === 0 ? (
-          <div className="card">
-            <div className=" flex flex-col items-center justify-center py-12 text-center gap-3">
-              <div className="w-14 h-14 rounded-2xl bg-[#F0F7F9] border border-[#C2DCE2] flex items-center justify-center text-[#2A6B7C]">
-                <CheckCircle size={28} weight="duotone" />
-              </div>
-              <div>
-                <p className="font-bold text-[#1A2B30] text-sm">Sin pacientes en espera</p>
-                <p className="text-xs text-[#5C7078] mt-1">Todos los pacientes del dÃ­a han sido atendidos.</p>
-              </div>
+          <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center shadow-xs">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center text-xl mx-auto mb-3">
+              <CheckCircle size={24} weight="fill" />
             </div>
+            <p className="font-bold text-sm text-slate-900">Sin pacientes en sala de espera</p>
+            <p className="text-xs text-slate-500 mt-1">Todos los pacientes programados para hoy han sido atendidos.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {citasPendientes.map((cita) => (
               <CitaCard
                 key={cita.id}
@@ -373,16 +379,18 @@ export default function MonitoreoPage() {
         )}
       </div>
 
-      {/* â”€â”€ Atendidas hoy â”€â”€ */}
+      {/* ── Seccion: Atendidos Hoy ── */}
       {!loading && citasAtendidas.length > 0 && (
         <div>
-          <div className="flex items-center gap-3 mb-4">
-            <h2 className="section-title mb-0">Atendidos hoy</h2>
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#EBF5EF] text-[#2E7D52] border border-[#C7E2D2]">
+          <div className="flex items-center gap-2.5 mb-3.5">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+              Atendidos Hoy
+            </h2>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">
               {citasAtendidas.length}
             </span>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {citasAtendidas.map((cita) => (
               <CitaCard
                 key={cita.id}
@@ -396,16 +404,18 @@ export default function MonitoreoPage() {
         </div>
       )}
 
-      {/* â”€â”€ Canceladas hoy (colapsado) â”€â”€ */}
+      {/* ── Seccion: Canceladas Hoy ── */}
       {!loading && citasCanceladas.length > 0 && (
         <div>
-          <div className="flex items-center gap-3 mb-4">
-            <h2 className="section-title mb-0">Canceladas hoy</h2>
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#FDECEA] text-[#C0392B] border border-[#F5C6C2]">
+          <div className="flex items-center gap-2.5 mb-3.5">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+              Canceladas Hoy
+            </h2>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-100 text-rose-800 border border-rose-200">
               {citasCanceladas.length}
             </span>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {citasCanceladas.map((cita) => (
               <CitaCard
                 key={cita.id}
@@ -419,28 +429,23 @@ export default function MonitoreoPage() {
         </div>
       )}
 
-      {/* â”€â”€ Sin citas hoy â”€â”€ */}
+      {/* ── Sin citas en todo el día ── */}
       {!loading && citas.length === 0 && !error && (
-        <div className="card">
-          <div className=" flex flex-col items-center justify-center py-16 text-center gap-3">
-            <div className="w-16 h-16 rounded-2xl bg-[#F0F7F9] border border-[#C2DCE2] flex items-center justify-center text-[#2A6B7C]">
-              <Circle size={32} weight="thin" />
-            </div>
-            <div>
-              <p className="font-bold text-[#1A2B30]">Sin citas programadas hoy</p>
-              <p className="text-xs text-[#5C7078] mt-1.5">
-                No hay citas agendadas para el dÃ­a de hoy.{' '}
-                <a href="/agenda" className="text-[#2A6B7C] font-semibold hover:underline">
-                  Ir a la Agenda
-                </a>{' '}
-                para programar una.
-              </p>
-            </div>
+        <div className="bg-white border border-slate-200 rounded-2xl p-10 text-center shadow-xs">
+          <div className="w-14 h-14 rounded-2xl bg-sky-50 border border-sky-200 text-sky-600 flex items-center justify-center text-2xl mx-auto mb-3">
+            <CalendarBlank size={28} weight="fill" />
           </div>
+          <p className="font-bold text-base text-slate-900">Sin citas programadas para hoy</p>
+          <p className="text-xs text-slate-500 mt-1">
+            No hay registros de citas en la agenda del día.{' '}
+            <a href="/agenda" className="text-sky-600 font-bold hover:underline">
+              Ir a la Agenda
+            </a>{' '}
+            para agendar una consulta.
+          </p>
         </div>
       )}
 
     </div>
   );
 }
-

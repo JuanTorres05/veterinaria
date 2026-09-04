@@ -1,31 +1,47 @@
 // Servicio para el registro de clientes y mascotas (HU-02)
-// Ahora acepta un array de mascotas — todas se insertan en la misma transacción.
-// Si cualquier inserción falla, se hace rollback completo (ningún dato queda a medias).
+// Ahora acepta campos extendidos: cedula, direccion en clientes;
+// sexo, fecha_nacimiento, peso_kg, color en mascotas.
 
 import pool from '../../db/pool.js';
 
 export async function registrarClienteMascota({ cliente, mascotas }) {
-  // Pedimos una conexión dedicada para manejar la transacción nosotros mismos
   const connection = await pool.getConnection();
 
   try {
     await connection.beginTransaction();
 
-    // Paso 1: insertar el cliente
+    // Paso 1: insertar el cliente (con nuevos campos opcionales)
     const [clienteResult] = await connection.execute(
-      'INSERT INTO clientes (nombre, telefono, correo) VALUES (?, ?, ?)',
-      [cliente.nombre, cliente.telefono, cliente.correo]
+      `INSERT INTO clientes (nombre, cedula, direccion, telefono, correo)
+       VALUES (?, ?, ?, ?, ?)`,
+      [
+        cliente.nombre,
+        cliente.cedula    || null,
+        cliente.direccion || null,
+        cliente.telefono,
+        cliente.correo
+      ]
     );
 
     const clienteId = clienteResult.insertId;
 
-    // Paso 2: insertar cada mascota vinculada al cliente en la misma transacción
+    // Paso 2: insertar cada mascota con campos extendidos
     const mascotasInsertadas = [];
 
     for (const mascota of mascotas) {
       const [mascotaResult] = await connection.execute(
-        'INSERT INTO mascotas (cliente_id, nombre, especie, raza) VALUES (?, ?, ?, ?)',
-        [clienteId, mascota.nombre, mascota.especie, mascota.raza]
+        `INSERT INTO mascotas (cliente_id, nombre, especie, raza, sexo, fecha_nacimiento, peso_kg, color)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          clienteId,
+          mascota.nombre,
+          mascota.especie,
+          mascota.raza,
+          mascota.sexo             || 'Desconocido',
+          mascota.fechaNacimiento  || null,
+          mascota.pesoKg           || null,
+          mascota.color            || null
+        ]
       );
 
       mascotasInsertadas.push({
@@ -35,19 +51,14 @@ export async function registrarClienteMascota({ cliente, mascotas }) {
       });
     }
 
-    // Todo bien — confirmamos cliente + todas las mascotas en un solo commit
     await connection.commit();
 
     return {
-      cliente: {
-        id: clienteId,
-        ...cliente
-      },
+      cliente: { id: clienteId, ...cliente },
       mascotas: mascotasInsertadas
     };
 
   } catch (err) {
-    // Si algo salió mal, deshacemos TODO para no dejar datos incompletos
     await connection.rollback();
     throw err;
   } finally {
@@ -57,8 +68,8 @@ export async function registrarClienteMascota({ cliente, mascotas }) {
 
 export async function listarClientes() {
   const [rows] = await pool.execute(
-    `SELECT c.id, c.nombre, c.telefono, c.correo, 
-            m.id AS mascota_id, m.nombre AS mascota_nombre, m.especie, m.raza 
+    `SELECT c.id, c.nombre, c.cedula, c.direccion, c.telefono, c.correo, c.created_at,
+            m.id AS mascota_id, m.nombre AS mascota_nombre, m.especie, m.raza, m.sexo
      FROM clientes c 
      LEFT JOIN mascotas m ON m.cliente_id = c.id 
      ORDER BY c.nombre`
@@ -71,8 +82,11 @@ export async function listarClientes() {
       clientesMap.set(row.id, {
         id: row.id,
         nombre: row.nombre,
+        cedula: row.cedula,
+        direccion: row.direccion,
         telefono: row.telefono,
         correo: row.correo,
+        createdAt: row.created_at,
         mascotas: []
       });
     }
@@ -82,11 +96,11 @@ export async function listarClientes() {
         id: row.mascota_id,
         nombre: row.mascota_nombre,
         especie: row.especie,
-        raza: row.raza
+        raza: row.raza,
+        sexo: row.sexo
       });
     }
   }
 
   return Array.from(clientesMap.values());
 }
-

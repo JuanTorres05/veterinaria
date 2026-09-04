@@ -9,7 +9,7 @@ const router = Router();
 router.get(
   '/resumen',
   requireAuth,
-  requireRole('admin', 'veterinario'),
+  requireRole('admin'),
   reportesController.resumen
 );
 
@@ -18,7 +18,7 @@ router.get(
 router.get(
   '/citas-por-dia',
   requireAuth,
-  requireRole('admin', 'veterinario'),
+  requireRole('admin'),
   reportesController.citasPorDia
 );
 
@@ -27,7 +27,7 @@ router.get(
 router.get(
   '/citas-por-dia-semana',
   requireAuth,
-  requireRole('admin', 'veterinario'),
+  requireRole('admin'),
   reportesController.citasPorDiaSemana
 );
 

@@ -1,15 +1,18 @@
-﻿import { useState } from "react";
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import Spinner from "../components/Spinner";
 import api from "../services/api";
 import {
   User, Phone, Envelope, Plus, Trash, Check, WarningCircle, Notebook,
-  Cat, ArrowRight, ArrowLeft, CheckCircle
+  Cat, ArrowRight, ArrowLeft, CheckCircle, FolderUser
 } from "@phosphor-icons/react";
 
-/* Constants */
-const MASCOTA_INIT = { nombre: "", especie: "", raza: "" };
-const FORM_INIT    = { cliente: { nombre: "", telefono: "", correo: "" }, mascotas: [{ ...MASCOTA_INIT }] };
+/* Constantes iniciales */
+const MASCOTA_INIT = { nombre: "", especie: "Perro", raza: "", sexo: "Desconocido", fechaNacimiento: "", pesoKg: "", color: "" };
+const FORM_INIT    = { cliente: { nombre: "", cedula: "", direccion: "", telefono: "", correo: "" }, mascotas: [{ ...MASCOTA_INIT }] };
 const telefonoRegex = /^[0-9+\-\s]{7,15}$/;
+const correoRegex   = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 const ESPECIES = [
   { value: "Perro",  icon: "🐕", label: "Perro"  },
   { value: "Gato",   icon: "🐈", label: "Gato"   },
@@ -18,53 +21,63 @@ const ESPECIES = [
   { value: "Reptil", icon: "🦎", label: "Reptil"  },
   { value: "Otro",   icon: "🐾", label: "Otro"    },
 ];
+
 const PET_PALETTE = [
-  { accent: "#1D4B58", bg: "#F2F6F7", bd: "#D5E2E4" },
-  { accent: "#2A8E79", bg: "#EBF7F5", bd: "#B2E0D9" },
-  { accent: "#7B5EA7", bg: "#F5F0FF", bd: "#D6C8F5" },
-  { accent: "#C0720A", bg: "#FFF5E6", bd: "#FFD4A0" },
-  { accent: "#B03060", bg: "#FFF0F5", bd: "#F5C0D0" },
+  { accent: "#0284C7", bg: "#F0F9FF", bd: "#BAE6FD" }, // Cyan/Sky
+  { accent: "#059669", bg: "#ECFDF5", bd: "#A7F3D0" }, // Emerald
+  { accent: "#7C3AED", bg: "#F5F3FF", bd: "#DDD6FE" }, // Purple
+  { accent: "#D97706", bg: "#FFFBEB", bd: "#FDE68A" }, // Amber
+  { accent: "#E11D48", bg: "#FFF1F2", bd: "#FECDD3" }, // Rose
 ];
 
 const STEPS = [
   { id: 1, label: "Propietario", desc: "Datos de contacto" },
-  { id: 2, label: "Mascotas",   desc: "Datos de la(s) mascota(s)" },
-  { id: 3, label: "Resumen",    desc: "Confirmacion" },
+  { id: 2, label: "Mascotas",   desc: "Datos clínicos" },
+  { id: 3, label: "Resumen",    desc: "Confirmación" },
 ];
 
 function getPalette(i) { return PET_PALETTE[i % PET_PALETTE.length]; }
 
-/* Validation helpers */
+/* Helpers de Validación */
 function validateCliente(cliente) {
   const e = {};
-  if (!cliente.nombre.trim())                               e.nombre   = "Nombre obligatorio.";
-  if (!telefonoRegex.test(cliente.telefono))                e.telefono = "Telefono invalido (7-15 digitos).";
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cliente.correo)) e.correo   = "Correo no valido.";
+  if (!cliente.nombre.trim() || cliente.nombre.trim().length < 3) {
+    e.nombre = "Ingresa el nombre completo (mínimo 3 caracteres).";
+  }
+  const tel = cliente.telefono.trim();
+  if (!tel || !telefonoRegex.test(tel)) {
+    e.telefono = "Ingresa un número telefónico válido (7 a 15 dígitos).";
+  }
+  const correo = cliente.correo.trim();
+  if (!correo || !correoRegex.test(correo)) {
+    e.correo = "Ingresa una dirección de correo válida (ej. usuario@correo.com).";
+  }
   return e;
 }
+
 function validateMascotas(mascotas) {
   return mascotas.map(m => {
     const e = {};
-    if (!m.nombre.trim())  e.nombre  = "Nombre obligatorio.";
+    if (!m.nombre.trim())  e.nombre  = "El nombre de la mascota es obligatorio.";
     if (!m.especie.trim()) e.especie = "Selecciona una especie.";
-    if (!m.raza.trim())    e.raza    = "Raza obligatoria.";
+    if (!m.raza.trim())    e.raza    = "La raza es obligatoria.";
     return e;
   });
 }
 
-/* Sub-components */
 function FieldError({ msg }) {
   if (!msg) return null;
   return (
-    <p className="flex items-center gap-1.5 text-[11px] mt-1.5 font-semibold select-none" style={{ color: "var(--color-danger)" }}>
+    <p className="flex items-center gap-1 text-[11px] mt-1.5 font-bold text-rose-600 select-none">
       <span>▲</span>{msg}
     </p>
   );
 }
+
 function FieldLabel({ htmlFor, children, required }) {
   return (
-    <label htmlFor={htmlFor} className="label">
-      {children}{required && <span className="ml-1" style={{ color: "var(--color-danger)" }}>*</span>}
+    <label htmlFor={htmlFor} className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+      {children}{required && <span className="ml-1 text-rose-500">*</span>}
     </label>
   );
 }
@@ -78,16 +91,30 @@ function StepperHeader({ step }) {
         const isLast = idx === STEPS.length - 1;
         return (
           <div key={s.id} className="flex items-center flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <div className={`stepper-circle ${status}`}>
-                {status === "done" ? <Check size={13} weight="bold" /> : s.id}
+            <div className="flex items-center gap-2.5 flex-shrink-0">
+              <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs transition-all ${
+                status === "done" 
+                  ? "bg-emerald-600 text-white shadow-xs"
+                  : status === "active"
+                  ? "bg-sky-600 text-white ring-4 ring-sky-100 shadow-xs"
+                  : "bg-slate-100 text-slate-400 border border-slate-200"
+              }`}>
+                {status === "done" ? <Check size={14} weight="bold" /> : s.id}
               </div>
               <div className="hidden sm:block">
-                <p className={`stepper-label ${status}`}>{s.label}</p>
-                <p className="text-[9px] uppercase tracking-wider" style={{ color: "var(--color-muted)" }}>{s.desc}</p>
+                <p className={`text-xs font-bold ${status === "pending" ? "text-slate-400" : "text-slate-900"}`}>
+                  {s.label}
+                </p>
+                <p className="text-[10px] uppercase font-semibold text-slate-400 tracking-wider">
+                  {s.desc}
+                </p>
               </div>
             </div>
-            {!isLast && <div className={`stepper-connector ${status === "done" ? "done" : ""}`} />}
+            {!isLast && (
+              <div className={`flex-1 h-0.5 mx-3 transition-colors ${
+                status === "done" ? "bg-emerald-600" : "bg-slate-200"
+              }`} />
+            )}
           </div>
         );
       })}
@@ -95,138 +122,232 @@ function StepperHeader({ step }) {
   );
 }
 
-/* Pet Card */
+/* Tarjeta de Mascota */
 function PetCard({ mascota, index, onUpdate, onRemove, errors, canRemove }) {
   const p = getPalette(index);
   return (
-    <div className="rounded-2xl border overflow-hidden" style={{ borderColor: "var(--color-border)", boxShadow: "var(--shadow-ambient)" }}>
-      {/* Card header */}
+    <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white shadow-xs">
       <div className="flex items-center justify-between px-5 py-3 border-b" style={{ backgroundColor: p.bg, borderColor: p.bd }}>
         <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: p.accent }}>
+          <div className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: p.accent }}>
             {index + 1}
           </div>
-          <span className="font-bold text-sm" style={{ color: p.accent, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-            <Cat size={14} style={{ display: "inline", marginRight: "6px" }} weight="bold" />
+          <span className="font-bold text-sm text-slate-900">
+            <Cat size={16} className="inline mr-1.5 text-slate-700" weight="bold" />
             {mascota.nombre.trim() ? mascota.nombre : `Mascota #${index + 1}`}
           </span>
         </div>
+        
+        {/* Modal de confirmación previa antes de eliminar */}
         {canRemove && (
-          <button type="button" onClick={() => onRemove(index)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[11px] font-bold uppercase tracking-wider transition-all active:scale-[0.95]"
-            style={{ color: "var(--color-danger)", backgroundColor: "var(--color-danger-bg)", borderColor: "var(--color-danger)" + "30" }}>
-            <Trash size={12} />Eliminar
+          <button 
+            type="button" 
+            onClick={() => onRemove(index)}
+            className="flex items-center gap-1 px-3 py-1 rounded-xl text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 hover:bg-rose-600 hover:text-white transition-all active:scale-[0.96]">
+            <Trash size={13} />
+            <span>Eliminar</span>
           </button>
         )}
       </div>
-      {/* Fields */}
+
       <div className="p-5 space-y-4 bg-white">
-        {/* Nombre */}
         <div>
           <FieldLabel htmlFor={`m-nombre-${index}`} required>Nombre de la mascota</FieldLabel>
-          <input id={`m-nombre-${index}`} type="text" placeholder="Ej. Max, Luna, Canela..."
-            value={mascota.nombre} onChange={e => onUpdate(index, "nombre", e.target.value)}
-            className={`input-field ${errors?.nombre ? "input-error" : ""}`} />
+          <input 
+            id={`m-nombre-${index}`} 
+            type="text" 
+            placeholder="Ej. Max, Luna, Toby..."
+            value={mascota.nombre} 
+            onChange={e => onUpdate(index, "nombre", e.target.value)}
+            className={`input-field ${errors?.nombre ? "border-rose-500 ring-1 ring-rose-500" : ""}`} 
+          />
           <FieldError msg={errors?.nombre} />
         </div>
-        {/* Especie */}
+
         <div>
           <FieldLabel required>Especie</FieldLabel>
           <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
             {ESPECIES.map(esp => {
               const sel = mascota.especie === esp.value;
               return (
-                <button key={esp.value} type="button" onClick={() => onUpdate(index, "especie", esp.value)}
-                  className="flex flex-col items-center justify-center gap-1.5 h-16 rounded-xl border-2 transition-all select-none active:scale-[0.95]"
-                  style={{ borderColor: sel ? p.accent : "var(--color-border)", backgroundColor: sel ? p.bg : "var(--color-primary-lt)", color: sel ? p.accent : "var(--color-muted)", fontWeight: sel ? "700" : "500", transform: sel ? "scale(1.03)" : "scale(1)" }}>
+                <button 
+                  key={esp.value} 
+                  type="button" 
+                  onClick={() => onUpdate(index, "especie", esp.value)}
+                  className={`flex flex-col items-center justify-center gap-1 h-16 rounded-xl border-2 transition-all select-none active:scale-[0.95] ${
+                    sel 
+                      ? "border-sky-600 bg-sky-50 text-sky-900 font-bold shadow-xs" 
+                      : "border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 font-medium"
+                  }`}>
                   <span className="text-xl">{esp.icon}</span>
-                  <span className="text-[9px] uppercase tracking-wide">{esp.label}</span>
+                  <span className="text-[10px] uppercase tracking-wider">{esp.label}</span>
                 </button>
               );
             })}
           </div>
           <FieldError msg={errors?.especie} />
         </div>
-        {/* Raza */}
-        <div>
-          <FieldLabel htmlFor={`m-raza-${index}`} required>Raza</FieldLabel>
-          <input id={`m-raza-${index}`} type="text" placeholder="Ej. Golden Retriever, Persa, Criolla..."
-            value={mascota.raza} onChange={e => onUpdate(index, "raza", e.target.value)}
-            className={`input-field ${errors?.raza ? "input-error" : ""}`} />
-          <FieldError msg={errors?.raza} />
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <FieldLabel htmlFor={`m-raza-${index}`} required>Raza</FieldLabel>
+            <input 
+              id={`m-raza-${index}`} 
+              type="text" 
+              placeholder="Ej. Golden Retriever, Persa, Criolla..."
+              value={mascota.raza} 
+              onChange={e => onUpdate(index, "raza", e.target.value)}
+              className={`input-field ${errors?.raza ? "border-rose-500 ring-1 ring-rose-500" : ""}`} 
+            />
+            <FieldError msg={errors?.raza} />
+          </div>
+
+          <div>
+            <FieldLabel>Sexo</FieldLabel>
+            <select
+              value={mascota.sexo}
+              onChange={e => onUpdate(index, "sexo", e.target.value)}
+              className="input-field">
+              <option value="Desconocido">Desconocido</option>
+              <option value="Macho">Macho</option>
+              <option value="Hembra">Hembra</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <FieldLabel htmlFor={`m-nacimiento-${index}`}>Fecha de nacimiento</FieldLabel>
+            <input
+              id={`m-nacimiento-${index}`}
+              type="date"
+              value={mascota.fechaNacimiento}
+              onChange={e => onUpdate(index, "fechaNacimiento", e.target.value)}
+              className="input-field"
+            />
+          </div>
+
+          <div>
+            <FieldLabel htmlFor={`m-peso-${index}`}>Peso (kg)</FieldLabel>
+            <input
+              id={`m-peso-${index}`}
+              type="number"
+              step="0.1"
+              min="0"
+              placeholder="Ej. 4.5"
+              value={mascota.pesoKg}
+              onChange={e => onUpdate(index, "pesoKg", e.target.value)}
+              className="input-field"
+            />
+          </div>
+
+          <div>
+            <FieldLabel htmlFor={`m-color-${index}`}>Color / pelaje</FieldLabel>
+            <input
+              id={`m-color-${index}`}
+              type="text"
+              placeholder="Ej. Negro con blanco"
+              value={mascota.color}
+              onChange={e => onUpdate(index, "color", e.target.value)}
+              className="input-field"
+            />
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-/* Summary Row */
+/* Fila Resumen */
 function SummaryRow({ label, value }) {
   return (
-    <div className="flex items-start justify-between py-2.5 border-b" style={{ borderColor: "var(--color-border)" }}>
-      <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--color-muted)", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{label}</span>
-      <span className="text-sm font-semibold text-right ml-4" style={{ color: "var(--color-text)" }}>{value || "—"}</span>
+    <div className="flex items-start justify-between py-2.5 border-b border-slate-100">
+      <span className="text-xs font-bold uppercase tracking-wider text-slate-500">{label}</span>
+      <span className="text-sm font-extrabold text-slate-900 text-right ml-4">{value || "—"}</span>
     </div>
   );
 }
 
-/* Main Page */
+/* Componente Principal */
 export default function RegistrarPage() {
-  const [step,     setStep]     = useState(1);
-  const [form,     setForm]     = useState(FORM_INIT);
-  const [errors,   setErrors]   = useState({ cliente: {}, mascotas: [{}] });
-  const [loading,  setLoading]  = useState(false);
-  const [success,  setSuccess]  = useState(null);
-  const [apiError, setApiError] = useState("");
+  const navigate = useNavigate();
+  const [step,        setStep]        = useState(1);
+  const [form,        setForm]        = useState(FORM_INIT);
+  const [errors,      setErrors]      = useState({ cliente: {}, mascotas: [{}] });
+  const [loading,     setLoading]     = useState(false);
+  const [successData, setSuccessData] = useState(null);
+  const [apiError,    setApiError]    = useState("");
 
-  /* Helpers */
-  function setCliente(field, value) { setForm(f => ({ ...f, cliente: { ...f.cliente, [field]: value } })); }
+  function setCliente(field, value) { 
+    setForm(f => ({ ...f, cliente: { ...f.cliente, [field]: value } })); 
+  }
+
   function updateMascota(index, field, value) {
     setForm(f => ({ ...f, mascotas: f.mascotas.map((m, i) => i === index ? { ...m, [field]: value } : m) }));
   }
+
   function addMascota() {
     if (form.mascotas.length >= 10) return;
     setForm(f => ({ ...f, mascotas: [...f.mascotas, { ...MASCOTA_INIT }] }));
     setErrors(e => ({ ...e, mascotas: [...e.mascotas, {}] }));
   }
+
+  /* Confirmación de acción destructiva antes de eliminar una mascota del formulario */
   function removeMascota(index) {
     if (form.mascotas.length <= 1) return;
-    setForm(f => ({ ...f, mascotas: f.mascotas.filter((_, i) => i !== index) }));
-    setErrors(e => ({ ...e, mascotas: e.mascotas.filter((_, i) => i !== index) }));
+    const petName = form.mascotas[index]?.nombre.trim() || `Mascota #${index + 1}`;
+    if (window.confirm(`¿Confirma que desea remover a ${petName} de la lista de registro?`)) {
+      setForm(f => ({ ...f, mascotas: f.mascotas.filter((_, i) => i !== index) }));
+      setErrors(e => ({ ...e, mascotas: e.mascotas.filter((_, i) => i !== index) }));
+    }
   }
 
-  /* Step navigation */
+  /* Navegación por pasos con Validación Real */
   function goNext() {
     if (step === 1) {
       const ce = validateCliente(form.cliente);
-      if (Object.keys(ce).length) { setErrors(e => ({ ...e, cliente: ce })); return; }
+      if (Object.keys(ce).length) { 
+        setErrors(e => ({ ...e, cliente: ce })); 
+        return; 
+      }
       setErrors(e => ({ ...e, cliente: {} }));
     }
+
     if (step === 2) {
       const me = validateMascotas(form.mascotas);
-      if (me.some(m => Object.keys(m).length)) { setErrors(e => ({ ...e, mascotas: me })); return; }
+      if (me.some(m => Object.keys(m).length)) { 
+        setErrors(e => ({ ...e, mascotas: me })); 
+        return; 
+      }
       setErrors(e => ({ ...e, mascotas: form.mascotas.map(() => ({})) }));
     }
+
     setStep(s => Math.min(s + 1, 3));
   }
+
   function goBack() { setStep(s => Math.max(s - 1, 1)); }
 
-  /* Submit */
+  function resetWizard() {
+    setForm(FORM_INIT);
+    setErrors({ cliente: {}, mascotas: [{}] });
+    setSuccessData(null);
+    setApiError("");
+    setStep(1);
+  }
+
+  /* Envío a API */
   async function handleSubmit() {
     setLoading(true);
     setApiError("");
-    setSuccess(null);
     try {
       const { data } = await api.post("/clientes/registrar", form);
-      setSuccess(data);
-      setForm(FORM_INIT);
-      setErrors({ cliente: {}, mascotas: [{}] });
-      setStep(1);
+      setSuccessData(data);
+      setStep(4); // Transicionar a Pantalla de Éxito Persistente
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err) {
       const status = err.response?.status;
       const body   = err.response?.data;
-      if (status === 409) setApiError("El correo electronico ya esta registrado en el sistema.");
+      if (status === 409) setApiError("El correo electrónico ya se encuentra registrado en la base de datos.");
       else if (status === 400 && body?.errors) {
         const mapped = { cliente: {}, mascotas: form.mascotas.map(() => ({})) };
         body.errors.forEach(({ path, message }) => {
@@ -240,195 +361,290 @@ export default function RegistrarPage() {
         setErrors(mapped);
         setStep(1);
       }
-      else if (status === 403) setApiError("No tienes permisos para realizar esta accion.");
-      else setApiError("Error al registrar. Intenta nuevamente.");
+      else if (status === 403) setApiError("No tienes permisos suficientes para realizar esta acción.");
+      else setApiError("Error al procesar el registro. Por favor intente nuevamente.");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in pb-6">
 
-      {/* Page Header */}
-      <div className="flex items-center gap-3.5 mb-2">
-        <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-          style={{ backgroundColor: "var(--color-primary-lt)", border: "1.5px solid var(--color-primary-bd)" }}>
-          <Notebook size={18} weight="bold" style={{ color: "var(--color-primary)" }} />
+      {/* Cabecera Principal Unificada */}
+      <div className="flex items-center gap-3.5 pb-2 border-b border-slate-200">
+        <div className="w-11 h-11 rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-sky-600 shadow-xs">
+          <Notebook size={22} weight="fill" />
         </div>
         <div>
-          <h1 className="page-title">Nuevo Registro</h1>
-          <p className="page-subtitle">Registra al propietario y sus mascotas en una sola transaccion.</p>
+          <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">
+            Wizard de Registro
+          </h1>
+          <p className="text-xs font-medium text-slate-500">
+            Alta de propietario y mascotas en una sola transacción clínica
+          </p>
         </div>
       </div>
 
-      {/* Success */}
-      {success && (
-        <div className="flex items-start gap-3 p-4 rounded-2xl border"
-          style={{ backgroundColor: "var(--color-success-bg)", borderColor: "var(--color-success)" }}>
-          <CheckCircle size={20} weight="fill" style={{ color: "var(--color-success)", flexShrink: 0 }} />
+      {/* API Error Banner */}
+      {apiError && (
+        <div className="flex items-center gap-3 p-4 rounded-xl border border-rose-200 bg-rose-50 text-rose-800 text-xs font-semibold">
+          <WarningCircle size={18} weight="bold" className="flex-shrink-0 text-rose-600" />
+          <span>{apiError}</span>
+        </div>
+      )}
+
+      {/* ── PASO 4: PANTALLA DE ÉXITO PERSISTENTE CON CTAs EXPLÍCITOS ── */}
+      {step === 4 ? (
+        <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center space-y-6 shadow-xs animate-fade-in">
+          <div className="w-16 h-16 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center text-3xl mx-auto shadow-xs">
+            <CheckCircle size={36} weight="fill" />
+          </div>
+
           <div>
-            <p className="font-semibold text-sm" style={{ color: "var(--color-success)", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              Registro exitoso
-            </p>
-            <p className="text-xs mt-1 leading-relaxed" style={{ color: "var(--color-success)" }}>
-              Propietario <strong>{success.cliente.nombre}</strong> registrado con <strong>{success.mascotas.length} {success.mascotas.length === 1 ? "mascota" : "mascotas"}</strong>: {success.mascotas.map(m => m.nombre).join(", ")}.
+            <h2 className="text-xl font-extrabold text-slate-900">
+              ¡Registro Completado Exitosamente!
+            </h2>
+            <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto leading-relaxed">
+              El propietario <strong className="text-slate-900">{successData?.cliente?.nombre}</strong> y su(s) mascota(s) <strong className="text-slate-900">{successData?.mascotas?.map(m => m.nombre).join(", ")}</strong> quedaron dados de alta correctamente en el sistema.
             </p>
           </div>
+
+          <div className="flex items-center justify-center gap-3 flex-wrap pt-2">
+            <Link 
+              to="/pacientes" 
+              className="btn-action-create">
+              <FolderUser size={16} weight="bold" />
+              <span>Ver Directorio de Pacientes</span>
+            </Link>
+
+            <button 
+              onClick={resetWizard} 
+              className="btn-action-secondary">
+              <Plus size={16} weight="bold" />
+              <span>Registrar Otro Cliente</span>
+            </button>
+          </div>
         </div>
-      )}
+      ) : (
+        /* Tarjeta del Wizard Form */
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+          <div className="p-6 border-b border-slate-100">
+            <StepperHeader step={step} />
 
-      {/* API Error */}
-      {apiError && (
-        <div className="flex items-center gap-3 p-4 rounded-2xl border text-xs"
-          style={{ backgroundColor: "var(--color-danger-bg)", borderColor: "var(--color-danger)", color: "var(--color-danger)" }}>
-          <WarningCircle size={18} weight="bold" style={{ flexShrink: 0 }} />
-          <span className="font-semibold">{apiError}</span>
-        </div>
-      )}
-
-      {/* Wizard Card */}
-      <div className="rounded-2xl border" style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)", boxShadow: "var(--shadow-modal)" }}>
-        <div className="p-6 border-b" style={{ borderColor: "var(--color-border)" }}>
-          <StepperHeader step={step} />
-
-          {/* Step 1: Propietario */}
-          {step === 1 && (
-            <div className="space-y-4 animate-fade-in">
-              <div>
-                <FieldLabel htmlFor="c-nombre" required>Nombre completo</FieldLabel>
-                <div className="relative">
-                  <User size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: "var(--color-muted)" }} />
-                  <input id="c-nombre" type="text" placeholder="Ej. Ana Garcia Lopez"
-                    value={form.cliente.nombre} onChange={e => setCliente("nombre", e.target.value)}
-                    className={`input-field pl-10 ${errors.cliente.nombre ? "input-error" : ""}`} />
-                </div>
-                <FieldError msg={errors.cliente.nombre} />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Paso 1: Datos del Propietario */}
+            {step === 1 && (
+              <div className="space-y-4 animate-fade-in">
                 <div>
-                  <FieldLabel htmlFor="c-tel" required>Telefono</FieldLabel>
+                  <FieldLabel htmlFor="c-nombre" required>Nombre completo del propietario</FieldLabel>
                   <div className="relative">
-                    <Phone size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: "var(--color-muted)" }} />
-                    <input id="c-tel" type="tel" placeholder="3001234567"
-                      value={form.cliente.telefono} onChange={e => setCliente("telefono", e.target.value)}
-                      className={`input-field pl-10 ${errors.cliente.telefono ? "input-error" : ""}`} />
+                    <User size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input 
+                      id="c-nombre" 
+                      type="text" 
+                      placeholder="Ej. Ana García López"
+                      value={form.cliente.nombre} 
+                      onChange={e => setCliente("nombre", e.target.value)}
+                      className={`input-field pl-10 ${errors.cliente.nombre ? "border-rose-500 ring-1 ring-rose-500" : ""}`} 
+                    />
                   </div>
-                  <FieldError msg={errors.cliente.telefono} />
+                  <FieldError msg={errors.cliente.nombre} />
                 </div>
-                <div>
-                  <FieldLabel htmlFor="c-correo" required>Correo electronico</FieldLabel>
-                  <div className="relative">
-                    <Envelope size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: "var(--color-muted)" }} />
-                    <input id="c-correo" type="email" placeholder="ana@correo.com"
-                      value={form.cliente.correo} onChange={e => setCliente("correo", e.target.value)}
-                      className={`input-field pl-10 ${errors.cliente.correo ? "input-error" : ""}`} />
-                  </div>
-                  <FieldError msg={errors.cliente.correo} />
-                </div>
-              </div>
-            </div>
-          )}
 
-          {/* Step 2: Mascotas */}
-          {step === 2 && (
-            <div className="space-y-4 animate-fade-in">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-bold uppercase tracking-wider" style={{ color: "var(--color-muted)", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  {form.mascotas.length} {form.mascotas.length === 1 ? "mascota" : "mascotas"} registradas
-                </p>
-                <span className="text-[10px]" style={{ color: "var(--color-muted)" }}>Maximo 10</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <FieldLabel htmlFor="c-cedula">Número de cédula / documento</FieldLabel>
+                    <input 
+                      id="c-cedula"
+                      type="text"
+                      placeholder="Ej. 1098765432"
+                      value={form.cliente.cedula}
+                      onChange={e => setCliente("cedula", e.target.value)}
+                      className="input-field"
+                    />
+                  </div>
+
+                  <div>
+                    <FieldLabel htmlFor="c-direccion">Dirección de residencia</FieldLabel>
+                    <input
+                      id="c-direccion"
+                      type="text"
+                      placeholder="Ej. Cra 15 #32-10, Apto 401"
+                      value={form.cliente.direccion}
+                      onChange={e => setCliente("direccion", e.target.value)}
+                      className="input-field"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <FieldLabel htmlFor="c-tel" required>Teléfono celular de contacto</FieldLabel>
+                    <div className="relative">
+                      <Phone size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input 
+                        id="c-tel" 
+                        type="tel" 
+                        placeholder="3001234567"
+                        value={form.cliente.telefono} 
+                        onChange={e => setCliente("telefono", e.target.value)}
+                        className={`input-field pl-10 ${errors.cliente.telefono ? "border-rose-500 ring-1 ring-rose-500" : ""}`} 
+                      />
+                    </div>
+                    <FieldError msg={errors.cliente.telefono} />
+                  </div>
+
+                  <div>
+                    <FieldLabel htmlFor="c-correo" required>Correo electrónico</FieldLabel>
+                    <div className="relative">
+                      <Envelope size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input 
+                        id="c-correo" 
+                        type="email" 
+                        placeholder="ana.garcia@correo.com"
+                        value={form.cliente.correo} 
+                        onChange={e => setCliente("correo", e.target.value)}
+                        className={`input-field pl-10 ${errors.cliente.correo ? "border-rose-500 ring-1 ring-rose-500" : ""}`} 
+                      />
+                    </div>
+                    <FieldError msg={errors.cliente.correo} />
+                  </div>
+                </div>
               </div>
-              {form.mascotas.map((mascota, i) => (
-                <PetCard key={i} mascota={mascota} index={i} onUpdate={updateMascota} onRemove={removeMascota}
-                  errors={errors.mascotas?.[i]} canRemove={form.mascotas.length > 1} />
-              ))}
-              {form.mascotas.length < 10 && (
-                <button type="button" onClick={addMascota}
-                  className="w-full py-3.5 rounded-2xl font-bold text-xs uppercase tracking-wider select-none border-2 border-dashed transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-                  style={{ borderColor: "var(--color-primary-bd)", backgroundColor: "var(--color-primary-lt)", color: "var(--color-primary)", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  <Plus size={14} weight="bold" />Agregar otra mascota
+            )}
+
+            {/* Paso 2: Datos de las Mascotas */}
+            {step === 2 && (
+              <div className="space-y-4 animate-fade-in">
+                <div className="flex items-center justify-between mb-2">
+                  {/* Corregida concordancia singular/plural */}
+                  <p className="text-xs font-extrabold uppercase tracking-wider text-slate-500">
+                    {form.mascotas.length} {form.mascotas.length === 1 ? "Mascota Registrada" : "Mascotas Registradas"}
+                  </p>
+                  <span className="text-[10px] font-semibold text-slate-400">Máximo 10 por cliente</span>
+                </div>
+
+                {form.mascotas.map((mascota, i) => (
+                  <PetCard 
+                    key={i} 
+                    mascota={mascota} 
+                    index={i} 
+                    onUpdate={updateMascota} 
+                    onRemove={removeMascota}
+                    errors={errors.mascotas?.[i]} 
+                    canRemove={form.mascotas.length > 1} 
+                  />
+                ))}
+
+                {form.mascotas.length < 10 && (
+                  <button 
+                    type="button" 
+                    onClick={addMascota}
+                    className="w-full py-3.5 rounded-2xl font-bold text-xs uppercase tracking-wider select-none border-2 border-dashed border-sky-200 bg-sky-50/60 text-sky-800 hover:bg-sky-100 transition-all active:scale-[0.98] flex items-center justify-center gap-2">
+                    <Plus size={15} weight="bold" />
+                    <span>Agregar otra mascota a este propietario</span>
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Paso 3: Resumen Final */}
+            {step === 3 && (
+              <div className="animate-fade-in space-y-5">
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">
+                    Datos del Propietario
+                  </h3>
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 divide-y divide-slate-100">
+                    <SummaryRow label="Nombre Completo" value={form.cliente.nombre} />
+                    <SummaryRow label="Teléfono"          value={form.cliente.telefono} />
+                    <SummaryRow label="Correo Electrónico" value={form.cliente.correo} />
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">
+                    Mascotas a Registrar ({form.mascotas.length})
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {form.mascotas.map((m, i) => {
+                      const p = getPalette(i);
+                      const esp = ESPECIES.find(e => e.value === m.especie);
+                      return (
+                        <div 
+                          key={i} 
+                          className="flex items-center gap-3 p-3.5 rounded-xl border"
+                          style={{ backgroundColor: p.bg, borderColor: p.bd }}>
+                          <span className="text-2xl">{esp?.icon || "🐾"}</span>
+                          <div>
+                            <p className="font-bold text-sm" style={{ color: p.accent }}>
+                              {m.nombre || "—"}
+                            </p>
+                            <p className="text-xs font-semibold text-slate-500">
+                              {m.especie} • {m.raza || "—"}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Navegación y Acciones del Formulario */}
+          <div className="flex items-center justify-between p-5 bg-slate-50 border-t border-slate-100">
+            <div>
+              {step > 1 && (
+                <button 
+                  type="button" 
+                  onClick={goBack}
+                  className="btn-action-secondary">
+                  <ArrowLeft size={15} weight="bold" />
+                  <span>Atrás</span>
                 </button>
               )}
             </div>
-          )}
 
-          {/* Step 3: Summary */}
-          {step === 3 && (
-            <div className="animate-fade-in space-y-5">
-              {/* Owner summary */}
-              <div>
-                <p className="section-title mb-3">Propietario</p>
-                <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)" }}>
-                  <div className="px-4 divide-y" style={{ divideColor: "var(--color-border)" }}>
-                    <SummaryRow label="Nombre"  value={form.cliente.nombre} />
-                    <SummaryRow label="Telefono" value={form.cliente.telefono} />
-                    <SummaryRow label="Correo"  value={form.cliente.correo} />
-                  </div>
-                </div>
-              </div>
-              {/* Pets summary */}
-              <div>
-                <p className="section-title mb-3">
-                  Mascotas ({form.mascotas.length})
-                </p>
-                <div className="space-y-3">
-                  {form.mascotas.map((m, i) => {
-                    const p = getPalette(i);
-                    const esp = ESPECIES.find(e => e.value === m.especie);
-                    return (
-                      <div key={i} className="flex items-center gap-3 px-4 py-3 rounded-xl border"
-                        style={{ backgroundColor: p.bg, borderColor: p.bd }}>
-                        <span className="text-2xl">{esp?.icon || "🐾"}</span>
-                        <div>
-                          <p className="font-bold text-sm" style={{ color: p.accent, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{m.nombre || "—"}</p>
-                          <p className="text-[11px]" style={{ color: "var(--color-muted)" }}>{m.especie} · {m.raza || "—"}</p>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-bold text-slate-400 hidden sm:block">
+                Paso {step} de {STEPS.length}
+              </span>
+
+              {step < 3 ? (
+                <button 
+                  type="button" 
+                  onClick={goNext}
+                  className="btn-action-create">
+                  <span>Continuar</span>
+                  <ArrowRight size={15} weight="bold" />
+                </button>
+              ) : (
+                /* Botón Verde Esmeralda (btn-action-nav) Código Consistente de Confirmación Final */
+                <button 
+                  type="button" 
+                  onClick={handleSubmit} 
+                  disabled={loading}
+                  className="btn-action-nav">
+                  {loading ? (
+                    <>
+                      <Spinner size="sm" />
+                      <span>Registrando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check size={16} weight="bold" />
+                      <span>Confirmar y Registrar</span>
+                    </>
+                  )}
+                </button>
+              )}
             </div>
-          )}
+          </div>
         </div>
+      )}
 
-        {/* Navigation Footer */}
-        <div className="flex items-center justify-between p-5">
-          <div>
-            {step > 1 && (
-              <button type="button" onClick={goBack}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl border font-semibold text-sm transition-all active:scale-[0.97]"
-                style={{ borderColor: "var(--color-border)", color: "var(--color-muted)", backgroundColor: "white", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                <ArrowLeft size={15} weight="bold" />Atras
-              </button>
-            )}
-          </div>
-          <div className="flex items-center gap-3">
-            <p className="text-[11px] font-medium hidden sm:block" style={{ color: "var(--color-muted)" }}>
-              Paso {step} de {STEPS.length}
-            </p>
-            {step < 3 ? (
-              <button type="button" onClick={goNext}
-                className="flex items-center gap-2 px-5 py-2 rounded-xl font-semibold text-sm text-white transition-all active:scale-[0.97]"
-                style={{ backgroundColor: "var(--color-primary)", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                Continuar<ArrowRight size={15} weight="bold" />
-              </button>
-            ) : (
-              <button type="button" onClick={handleSubmit} disabled={loading}
-                className="flex items-center gap-2 px-5 py-2 rounded-xl font-semibold text-sm text-white transition-all active:scale-[0.97] disabled:opacity-60"
-                style={{ backgroundColor: "var(--color-success)", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                {loading ? (
-                  <><Spinner size="sm" />Guardando...</>
-                ) : (
-                  <><Check size={15} weight="bold" />Confirmar y Registrar</>
-                )}
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
-

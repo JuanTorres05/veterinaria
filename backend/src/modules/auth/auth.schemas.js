@@ -10,3 +10,9 @@ export const loginSchema = z.object({
   cedula: z.string().min(1, 'La cédula es obligatoria.'),
   password: z.string().min(6, 'La contraseña debe tener al menos 6 caracteres.')
 });
+
+// Validación del formulario de recuperación de contraseña
+export const recuperarPasswordSchema = z.object({
+  cedula: z.string().min(1, 'La cédula es obligatoria.'),
+  correo: z.string().email('El correo electrónico no es válido.')
+});

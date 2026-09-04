@@ -35,3 +35,12 @@ export class NotFoundError extends HttpError {
     super(404, message);
   }
 }
+
+/**
+ * 409 Conflict — conflicto con el estado actual del recurso (ej. duplicados).
+ */
+export class ConflictError extends HttpError {
+  constructor(message = 'El recurso ya existe o genera un conflicto.') {
+    super(409, message);
+  }
+}

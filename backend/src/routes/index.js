@@ -4,6 +4,7 @@ import clientesRoutes from '../modules/clientes/clientes.routes.js';
 import mascotasRoutes from '../modules/mascotas/mascotas.routes.js';
 import citasRoutes from '../modules/citas/citas.routes.js';
 import reportesRoutes from '../modules/reportes/reportes.routes.js';
+import usuariosRoutes from '../modules/usuarios/usuarios.routes.js';
 
 const router = Router();
 
@@ -16,6 +17,7 @@ router.use('/clientes', clientesRoutes);
 router.use('/mascotas', mascotasRoutes);
 router.use('/citas', citasRoutes);
 router.use('/reportes', reportesRoutes);
+router.use('/usuarios', usuariosRoutes);
 
 export default router;
 

@@ -24,8 +24,8 @@ export async function crear(req, res, next) {
 export async function cambiarEstado(req, res, next) {
   try {
     const id = parseInt(req.params.id, 10);
-    const { estado } = cambiarEstadoSchema.parse(req.body);
-    const result = await citasService.cambiarEstadoCita(id, estado);
+    const { estado, notas_cancelacion } = cambiarEstadoSchema.parse(req.body);
+    const result = await citasService.cambiarEstadoCita(id, estado, notas_cancelacion || null);
     return res.json(result);
   } catch (err) {
     return next(err);

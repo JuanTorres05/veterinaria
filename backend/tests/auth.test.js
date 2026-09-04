@@ -111,11 +111,11 @@ describe('requireRole — control de acceso por rol', () => {
     expect(res.status).toBe(403);
   });
 
-  it('200 veterinario → GET /api/reportes/resumen', async () => {
+  it('403 veterinario → GET /api/reportes/resumen (solo admin)', async () => {
     const res = await request(app)
       .get('/api/reportes/resumen')
       .set('Authorization', `Bearer ${tokens.veterinario}`);
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(403);
   });
 
   it('403 veterinario → POST /api/citas (solo admin/recepcionista)', async () => {

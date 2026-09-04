@@ -3,14 +3,13 @@ import { NotFoundError } from '../../errors/http.errors.js';
 
 /**
  * Lista todas las mascotas de un cliente dado su ID.
- * @param {number} clienteId
  */
 export async function listarPorCliente(clienteId) {
     const [mascotas] = await pool.execute(
-        `SELECT id, cliente_id, nombre, especie, raza, created_at
-     FROM mascotas
-     WHERE cliente_id = ?
-     ORDER BY nombre ASC`,
+        `SELECT id, cliente_id, nombre, especie, raza, sexo, fecha_nacimiento, peso_kg, color, foto_url, created_at
+         FROM mascotas
+         WHERE cliente_id = ?
+         ORDER BY nombre ASC`,
         [clienteId]
     );
     return mascotas;
@@ -18,13 +17,17 @@ export async function listarPorCliente(clienteId) {
 
 export async function obtenerPorId(mascotaId) {
     const [rows] = await pool.execute(
-        `SELECT m.id, m.nombre, m.especie, m.raza, m.created_at,
+        `SELECT 
+            m.id, m.nombre, m.especie, m.raza,
+            m.sexo, m.fecha_nacimiento, m.peso_kg, m.color, m.foto_url,
+            m.created_at,
             c.id AS cliente_id, c.nombre AS cliente_nombre,
-            c.telefono AS cliente_telefono, c.correo AS cliente_correo
-     FROM mascotas m
-     INNER JOIN clientes c ON c.id = m.cliente_id
-     WHERE m.id = ?
-     LIMIT 1`,
+            c.cedula AS cliente_cedula, c.telefono AS cliente_telefono,
+            c.correo AS cliente_correo, c.direccion AS cliente_direccion
+         FROM mascotas m
+         INNER JOIN clientes c ON c.id = m.cliente_id
+         WHERE m.id = ?
+         LIMIT 1`,
         [mascotaId]
     );
 
@@ -47,10 +50,12 @@ export async function obtenerPorId(mascotaId) {
 
     // Obtener citas de la mascota
     const [citas] = await pool.execute(
-        `SELECT id, fecha_hora, motivo, estado 
-         FROM citas 
-         WHERE mascota_id = ? 
-         ORDER BY fecha_hora DESC`,
+        `SELECT c.id, c.fecha_hora, c.motivo, c.estado, c.duracion_min, c.notas_cancelacion,
+                u.nombre AS veterinario_nombre
+         FROM citas c
+         LEFT JOIN usuarios u ON u.id = c.usuario_id
+         WHERE c.mascota_id = ? 
+         ORDER BY c.fecha_hora DESC`,
         [mascotaId]
     );
 
@@ -59,12 +64,19 @@ export async function obtenerPorId(mascotaId) {
         nombre: row.nombre,
         especie: row.especie,
         raza: row.raza,
+        sexo: row.sexo,
+        fechaNacimiento: row.fecha_nacimiento,
+        pesoKg: row.peso_kg,
+        color: row.color,
+        fotoUrl: row.foto_url,
         createdAt: row.created_at,
         cliente: {
             id: row.cliente_id,
             nombre: row.cliente_nombre,
+            cedula: row.cliente_cedula,
             telefono: row.cliente_telefono,
-            correo: row.cliente_correo
+            correo: row.cliente_correo,
+            direccion: row.cliente_direccion
         },
         historial,
         citas
@@ -92,4 +104,3 @@ export async function crearHistorial({ mascota_id, usuario_id, fecha, motivo, di
 
     return rows[0];
 }
-

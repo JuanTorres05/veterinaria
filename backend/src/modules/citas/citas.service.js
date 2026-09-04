@@ -1,12 +1,14 @@
 import pool from '../../db/pool.js';
 import { NotFoundError } from '../../errors/http.errors.js';
 
-export async function listarCitas({ fecha, estado }) {
-  let query = `
+// Query base reutilizable para citas con join completo
+const CITA_SELECT = `
     SELECT 
       c.id, 
       c.fecha_hora, 
-      c.motivo, 
+      c.motivo,
+      c.duracion_min,
+      c.notas_cancelacion,
       c.estado, 
       c.created_at, 
       m.id AS mascota_id,
@@ -20,7 +22,10 @@ export async function listarCitas({ fecha, estado }) {
     JOIN mascotas m ON m.id = c.mascota_id
     JOIN clientes cl ON cl.id = m.cliente_id
     JOIN usuarios u ON u.id = c.usuario_id
-  `;
+`;
+
+export async function listarCitas({ fecha, estado }) {
+  let query = CITA_SELECT;
   
   const conditions = [];
   const params = [];
@@ -45,76 +50,44 @@ export async function listarCitas({ fecha, estado }) {
   return rows;
 }
 
-export async function crearCita({ mascota_id, usuario_id, fecha_hora, motivo }) {
+export async function crearCita({ mascota_id, usuario_id, fecha_hora, motivo, duracion_min }) {
+  const duracion = duracion_min ? Number(duracion_min) : 30;
+
   const [result] = await pool.execute(
-    'INSERT INTO citas (mascota_id, usuario_id, fecha_hora, motivo, estado) VALUES (?, ?, ?, ?, ?)',
-    [mascota_id, usuario_id, fecha_hora, motivo, 'pendiente']
+    `INSERT INTO citas (mascota_id, usuario_id, fecha_hora, motivo, duracion_min, estado)
+     VALUES (?, ?, ?, ?, ?, 'pendiente')`,
+    [mascota_id, usuario_id, fecha_hora, motivo, duracion]
   );
 
   const newId = result.insertId;
 
-  // Devolvemos la cita creada con toda la información necesaria (join)
-  const [rows] = await pool.execute(
-    `
-    SELECT 
-      c.id, 
-      c.fecha_hora, 
-      c.motivo, 
-      c.estado, 
-      c.created_at, 
-      m.id AS mascota_id,
-      m.nombre AS mascota_nombre, 
-      m.especie, 
-      c.usuario_id,
-      cl.nombre AS cliente_nombre, 
-      cl.telefono, 
-      u.nombre AS veterinario_nombre
-    FROM citas c
-    JOIN mascotas m ON m.id = c.mascota_id
-    JOIN clientes cl ON cl.id = m.cliente_id
-    JOIN usuarios u ON u.id = c.usuario_id
-    WHERE c.id = ?
-    `,
-    [newId]
-  );
-
+  const [rows] = await pool.execute(CITA_SELECT + ' WHERE c.id = ?', [newId]);
   return rows[0];
 }
 
-export async function cambiarEstadoCita(id, estado) {
-  const [result] = await pool.execute(
-    'UPDATE citas SET estado = ? WHERE id = ?',
-    [estado, id]
-  );
+export async function cambiarEstadoCita(id, estado, notas_cancelacion) {
+  // Si se cancela, guardamos las notas de cancelación
+  if (estado === 'cancelada' && notas_cancelacion) {
+    await pool.execute(
+      'UPDATE citas SET estado = ?, notas_cancelacion = ? WHERE id = ?',
+      [estado, notas_cancelacion, id]
+    );
+  } else {
+    const [result] = await pool.execute(
+      'UPDATE citas SET estado = ? WHERE id = ?',
+      [estado, id]
+    );
 
-  if (result.affectedRows === 0) {
-    throw new NotFoundError('La cita especificada no existe.');
+    if (result.affectedRows === 0) {
+      throw new NotFoundError('La cita especificada no existe.');
+    }
   }
 
-  // Retornar la cita actualizada
-  const [rows] = await pool.execute(
-    `
-    SELECT 
-      c.id, 
-      c.fecha_hora, 
-      c.motivo, 
-      c.estado, 
-      c.created_at, 
-      m.id AS mascota_id,
-      m.nombre AS mascota_nombre, 
-      m.especie, 
-      c.usuario_id,
-      cl.nombre AS cliente_nombre, 
-      cl.telefono, 
-      u.nombre AS veterinario_nombre
-    FROM citas c
-    JOIN mascotas m ON m.id = c.mascota_id
-    JOIN clientes cl ON cl.id = m.cliente_id
-    JOIN usuarios u ON u.id = c.usuario_id
-    WHERE c.id = ?
-    `,
-    [id]
-  );
+  const [rows] = await pool.execute(CITA_SELECT + ' WHERE c.id = ?', [id]);
+
+  if (rows.length === 0) {
+    throw new NotFoundError('La cita especificada no existe.');
+  }
 
   return rows[0];
 }
@@ -144,4 +117,3 @@ export async function obtenerStatsDashboard() {
   
   return { clientes, mascotas, citasHoy, veterinarios };
 }
-

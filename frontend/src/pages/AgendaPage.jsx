@@ -2,7 +2,11 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import api from "../services/api";
 import Spinner from "../components/Spinner";
-import { CalendarBlank, Plus, Trash, X, ArrowCounterClockwise, Check, MagnifyingGlass, Stethoscope, Phone, User, Chat, WarningCircle, CheckCircle } from "@phosphor-icons/react";
+import { 
+  CalendarBlank, Plus, Trash, X, ArrowCounterClockwise, Check, 
+  MagnifyingGlass, Stethoscope, Phone, User, Chat, WarningCircle, 
+  CheckCircle, Clock
+} from "@phosphor-icons/react";
 
 function getEspecieEmoji(especie) {
   const e = especie?.toLowerCase();
@@ -15,16 +19,26 @@ function getEspecieEmoji(especie) {
 }
 
 function formatTime(s) {
+  if (!s) return "";
   return new Date(s).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", hour12: true });
 }
+
+// Formateo seguro de fecha local (sin desfasamiento por zona horaria UTC)
 function formatDateDisplay(s) {
-  return new Date(s).toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "long" });
+  if (!s) return "Todas las fechas";
+  const parts = s.split("-");
+  if (parts.length !== 3) return s;
+  const year = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10) - 1;
+  const day = parseInt(parts[2], 10);
+  const d = new Date(year, month, day);
+  return d.toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 }
 
 const ESTADO_STYLES = {
-  pendiente: { bg: "var(--color-warning-bg)",  color: "var(--color-warning)",  label: "Pendiente"  },
-  atendida:  { bg: "var(--color-success-bg)",  color: "var(--color-success)",  label: "Atendida"   },
-  cancelada: { bg: "var(--color-danger-bg)",   color: "var(--color-danger)",   label: "Cancelada"  },
+  pendiente: { bg: "bg-amber-100 text-amber-900 border-amber-300", label: "Pendiente" },
+  atendida:  { bg: "bg-emerald-100 text-emerald-900 border-emerald-300", label: "Atendida" },
+  cancelada: { bg: "bg-rose-100 text-rose-900 border-rose-300", label: "Cancelada" },
 };
 
 export default function AgendaPage() {
@@ -37,9 +51,12 @@ export default function AgendaPage() {
   const [loading,      setLoading]      = useState(true);
   const [error,        setError]        = useState("");
 
-  const [fechaFiltro,  setFechaFiltro]  = useState(() => {
-    const t = new Date(); return new Date(t - t.getTimezoneOffset()*60000).toISOString().slice(0,10);
-  });
+  const todayStr = (() => {
+    const t = new Date(); 
+    return new Date(t - t.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  })();
+
+  const [fechaFiltro,  setFechaFiltro]  = useState(todayStr);
   const [estadoFiltro, setEstadoFiltro] = useState("");
 
   const [modalOpen,        setModalOpen]        = useState(false);
@@ -47,25 +64,32 @@ export default function AgendaPage() {
   const [selectedCliente,  setSelectedCliente]  = useState(null);
   const [selectedMascotaId,setSelectedMascotaId]= useState("");
   const [selectedUsuarioId,setSelectedUsuarioId]= useState("");
-  const [fechaHoraInput,   setFechaHoraInput]   = useState("");
+  
+  // Campos de fecha y hora separados para evitar placeholder "dd/mm/aaaa --:--"
+  const [fechaInput,       setFechaInput]       = useState(todayStr);
+  const [horaInput,        setHoraInput]        = useState("09:00");
   const [motivoInput,      setMotivoInput]      = useState("");
+  
   const [formError,        setFormError]        = useState("");
+  const [invalidFields,    setInvalidFields]    = useState({});
   const [guardando,        setGuardando]        = useState(false);
-  const [successMsg,       setSuccessMsg]       = useState(null); // { mascota, fecha }
+  const [successMsg,       setSuccessMsg]       = useState(null);
   const successTimer = useRef(null);
 
   const loadCitas = useCallback(async () => {
     try {
-      setLoading(true); setError("");
+      setLoading(true); 
+      setError("");
       const params = {};
-      if (fechaFiltro)  params.fecha  = fechaFiltro;
-      if (estadoFiltro) params.estado = estadoFiltro;
+      if (fechaFiltro) params.fecha = fechaFiltro;
       const res = await api.get("/citas", { params });
       setCitas(res.data);
     } catch (err) {
-      setError(err.response?.data?.message || "Error al cargar las citas.");
-    } finally { setLoading(false); }
-  }, [fechaFiltro, estadoFiltro]);
+      setError(err.response?.data?.message || "Error al cargar las citas de la agenda.");
+    } finally { 
+      setLoading(false); 
+    }
+  }, [fechaFiltro]);
 
   const loadModalData = async () => {
     try {
@@ -73,232 +97,341 @@ export default function AgendaPage() {
       setClientes(resC.data);
       const resV = await api.get("/auth/veterinarios").catch(() => ({ data: [] }));
       setVeterinarios(resV.data);
-    } catch (err) { console.error("Error modal data", err); }
+    } catch (err) { 
+      console.error("Error cargando datos para modal", err); 
+    }
   };
 
-  useEffect(() => { loadCitas(); },              [loadCitas]);
+  useEffect(() => { loadCitas(); }, [loadCitas]);
   useEffect(() => { if (modalOpen) loadModalData(); }, [modalOpen]);
 
-  // Auto-dismiss success banner after 5s
   function showSuccess(msg) {
     setSuccessMsg(msg);
     clearTimeout(successTimer.current);
-    successTimer.current = setTimeout(() => setSuccessMsg(null), 5000);
+    successTimer.current = setTimeout(() => setSuccessMsg(null), 6000);
   }
 
   const handleUpdateStatus = async (id, estado) => {
-    try { await api.patch(`/citas/${id}/estado`, { estado }); loadCitas(); }
-    catch (err) { alert(err.response?.data?.message || "Error al actualizar."); }
+    try { 
+      await api.patch(`/citas/${id}/estado`, { estado }); 
+      loadCitas(); 
+    } catch (err) { 
+      alert(err.response?.data?.message || "Error al actualizar estado."); 
+    }
   };
+
   const handleDelete = async (id) => {
-    if (!window.confirm("Eliminar esta cita de la agenda?")) return;
-    try { await api.delete(`/citas/${id}`); loadCitas(); }
-    catch (err) { alert(err.response?.data?.message || "Error al eliminar."); }
+    if (!window.confirm("¿Confirma que desea eliminar esta cita de la agenda?")) return;
+    try { 
+      await api.delete(`/citas/${id}`); 
+      loadCitas(); 
+    } catch (err) { 
+      alert(err.response?.data?.message || "Error al eliminar cita."); 
+    }
   };
 
   const handleBook = async (e) => {
     e.preventDefault();
-    if (!selectedMascotaId)  return setFormError("Selecciona una mascota.");
-    if (!selectedUsuarioId)  return setFormError("Selecciona un veterinario.");
-    if (!fechaHoraInput)     return setFormError("Especifica fecha y hora.");
-    if (!motivoInput.trim()) return setFormError("Describe el motivo de la cita.");
+    const errors = {};
 
-    // Capture display data before resetting
-    const mascotaNombre = selectedCliente?.mascotas?.find(m => String(m.id) === String(selectedMascotaId))?.nombre || "la mascota";
-    const vetNombre     = veterinarios.find(v => String(v.id) === String(selectedUsuarioId))?.nombre || "el veterinario";
-    const fechaDisplay  = new Date(fechaHoraInput).toLocaleString("es-CO", { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", hour12: true });
+    if (!selectedCliente) errors.cliente = true;
+    if (!selectedMascotaId) errors.mascota = true;
+    if (!selectedUsuarioId) errors.veterinario = true;
+    if (!fechaInput) errors.fecha = true;
+    if (!horaInput) errors.hora = true;
+    if (!motivoInput.trim()) errors.motivo = true;
+
+    setInvalidFields(errors);
+
+    if (Object.keys(errors).length > 0) {
+      return setFormError("Por favor completa todos los campos obligatorios marcados con (*).");
+    }
+
+    const fechaHoraConcat = `${fechaInput}T${horaInput}:00`;
+    const mascotaNombre   = selectedCliente?.mascotas?.find(m => String(m.id) === String(selectedMascotaId))?.nombre || "Mascota";
+    const vetNombre       = veterinarios.find(v => String(v.id) === String(selectedUsuarioId))?.nombre || "Veterinario";
+    const fechaDisplay    = `${formatDateDisplay(fechaInput)} a las ${horaInput}`;
 
     try {
-      setGuardando(true); setFormError("");
-      await api.post("/citas", { mascota_id: Number(selectedMascotaId), usuario_id: Number(selectedUsuarioId), fecha_hora: fechaHoraInput, motivo: motivoInput.trim() });
-      // Reset modal
+      setGuardando(true); 
+      setFormError("");
+      await api.post("/citas", { 
+        mascota_id: Number(selectedMascotaId), 
+        usuario_id: Number(selectedUsuarioId), 
+        fecha_hora: fechaHoraConcat, 
+        motivo: motivoInput.trim() 
+      });
+      
+      // Cerrar y limpiar modal
       setModalOpen(false);
-      setSelectedCliente(null); setClienteQuery(""); setSelectedMascotaId("");
-      setSelectedUsuarioId(""); setFechaHoraInput(""); setMotivoInput("");
+      setSelectedCliente(null); 
+      setClienteQuery(""); 
+      setSelectedMascotaId("");
+      setSelectedUsuarioId(""); 
+      setFechaInput(todayStr); 
+      setHoraInput("09:00");
+      setMotivoInput("");
+      setInvalidFields({});
+      
       loadCitas();
-      // Show success banner
       showSuccess({ mascota: mascotaNombre, vet: vetNombre, fecha: fechaDisplay });
-    } catch (err) { setFormError(err.response?.data?.message || "Error al crear la cita."); }
-    finally { setGuardando(false); }
+    } catch (err) { 
+      setFormError(err.response?.data?.message || "Error al registrar la cita."); 
+    } finally { 
+      setGuardando(false); 
+    }
   };
 
   const filteredClientes = clienteQuery.trim() === "" ? [] :
     clientes.filter(c => c.nombre.toLowerCase().includes(clienteQuery.toLowerCase()) || c.telefono.includes(clienteQuery) || c.correo.toLowerCase().includes(clienteQuery.toLowerCase()));
 
-  const today = new Date(); const todayStr = new Date(today - today.getTimezoneOffset()*60000).toISOString().slice(0,10);
+  // Conteos consistentes y exactos basados en la totalidad de citas del día/período
+  const countTodas      = citas.length;
+  const countPendientes = citas.filter(c => c.estado === "pendiente").length;
+  const countAtendidas  = citas.filter(c => c.estado === "atendida").length;
+  const countCanceladas = citas.filter(c => c.estado === "cancelada").length;
+
+  // Filtrado de citas mostrado en la tabla según el estado seleccionado
+  const citasFiltradas = estadoFiltro 
+    ? citas.filter(c => c.estado === estadoFiltro) 
+    : citas;
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in pb-6">
 
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
+      {/* Cabecera Principal */}
+      <div className="flex items-center justify-between flex-wrap gap-4 pb-2 border-b border-slate-200">
         <div>
-          <h1 className="page-title">Agenda Diaria</h1>
-          <p className="page-subtitle">{fechaFiltro ? formatDateDisplay(fechaFiltro) : "Mostrando todas las citas"}</p>
+          <h1 className="page-title capitalize">Agenda Diaria</h1>
+          <p className="page-subtitle font-medium text-slate-600 capitalize">
+            {fechaFiltro ? formatDateDisplay(fechaFiltro) : "Todas las citas registradas"}
+          </p>
         </div>
         {isAdminOrRec && (
-          <button onClick={() => setModalOpen(true)} className="btn-premium-primary">
+          <button onClick={() => setModalOpen(true)} className="btn-action-create">
+            <Plus size={16} weight="bold" />
             <span>Agendar Cita</span>
-            <div className="btn-icon-wrapper"><Plus size={13} weight="bold" /></div>
           </button>
         )}
       </div>
 
-      {/* ── Confirmation Banner ── */}
+      {/* Feedback de Éxito (Toast Banner Vibrante) */}
       {successMsg && (
-        <div
-          className="animate-fade-in flex items-start gap-4 px-5 py-4 rounded-2xl border"
-          style={{
-            backgroundColor: "var(--color-success-bg)",
-            borderColor: "var(--color-success)",
-            boxShadow: "0 4px 20px -4px rgba(42,142,121,0.18)",
-          }}
-        >
-          <div
-            className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-            style={{ backgroundColor: "var(--color-success)", color: "white" }}
-          >
+        <div className="animate-fade-in flex items-start gap-4 px-5 py-4 rounded-2xl border border-emerald-200 bg-emerald-50 text-emerald-900 shadow-md">
+          <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center flex-shrink-0 shadow-xs">
             <CheckCircle size={22} weight="fill" />
           </div>
           <div className="flex-1 min-w-0">
-            <p
-              className="font-bold text-base leading-tight"
-              style={{ color: "var(--color-success)", fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-            >
-              ¡Cita agendada exitosamente!
+            <p className="font-bold text-base leading-tight">
+              ¡Cita Agendada Exitosamente!
             </p>
-            <p className="text-sm mt-1 leading-relaxed" style={{ color: "var(--color-success)" }}>
-              <strong>{successMsg.mascota}</strong> quedó agendada con{" "}
-              <strong>Dr(a). {successMsg.vet}</strong> para el{" "}
-              <strong>{successMsg.fecha}</strong>.
+            <p className="text-sm mt-1 leading-relaxed text-emerald-800">
+              <strong>{successMsg.mascota}</strong> quedó programada con el <strong>Dr(a). {successMsg.vet}</strong> para el <strong>{successMsg.fecha}</strong>.
             </p>
           </div>
-          <button
+          <button 
             onClick={() => setSuccessMsg(null)}
-            className="flex items-center justify-center w-7 h-7 rounded-lg flex-shrink-0 transition-all active:scale-90"
-            style={{ color: "var(--color-success)", backgroundColor: "rgba(42,142,121,0.12)" }}
-          >
-            <X size={14} weight="bold" />
+            className="p-1.5 rounded-lg text-emerald-700 hover:bg-emerald-100 transition-all">
+            <X size={16} weight="bold" />
           </button>
         </div>
       )}
 
+      {/* Panel de Filtros y Búsqueda */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+            <CalendarBlank size={16} className="text-sky-600" />
+            Filtros de Agenda
+          </span>
 
-      {/* Filters */}
-      <div className="card grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-        <div>
-          <label className="label">Filtrar por fecha</label>
-          <input type="date" value={fechaFiltro} onChange={e => setFechaFiltro(e.target.value)} className="input-field" />
-        </div>
-        <div>
-          <label className="label">Estado</label>
-          <div className="flex rounded-xl overflow-hidden border h-11 p-0.5" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-primary-lt)" }}>
-            {[{ val: "", label: "Todas" }, { val: "pendiente", label: "Pendientes" }, { val: "atendida", label: "Atendidas" }, { val: "cancelada", label: "Canceladas" }].map(btn => (
-              <button key={btn.val} type="button" onClick={() => setEstadoFiltro(btn.val)}
-                className="flex-1 text-xs font-bold uppercase tracking-wide transition-all rounded-lg select-none"
-                style={{
-                  backgroundColor: estadoFiltro === btn.val ? "var(--color-primary)" : "transparent",
-                  color: estadoFiltro === btn.val ? "white" : "var(--color-muted)",
-                  fontFamily: "'Plus Jakarta Sans', sans-serif",
-                }}>
-                {btn.label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div>
-          <button onClick={() => { setFechaFiltro(todayStr); setEstadoFiltro(""); }}
-            className="btn-premium-secondary w-full">
-            <span>Limpiar filtros</span>
-            <div className="btn-icon-wrapper" style={{ backgroundColor: "rgba(29,75,88,0.08)" }}>
-              <ArrowCounterClockwise size={12} weight="bold" />
-            </div>
+          {/* Botón "Limpiar Filtros" claramente diferenciado como Botón Secundario */}
+          <button 
+            onClick={() => { setFechaFiltro(todayStr); setEstadoFiltro(""); }}
+            className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold transition-all active:scale-[0.98]">
+            <ArrowCounterClockwise size={14} weight="bold" className="text-slate-500" />
+            <span>Restablecer hoy</span>
           </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+          {/* Selector de Fecha */}
+          <div className="md:col-span-4">
+            <div className="flex items-center justify-between mb-1">
+              <label className="label mb-0">Filtrar por fecha</label>
+              {fechaFiltro && (
+                <button
+                  type="button"
+                  onClick={() => setFechaFiltro("")}
+                  className="text-[11px] font-semibold text-sky-600 hover:text-sky-700 hover:underline">
+                  Ver todas las fechas
+                </button>
+              )}
+            </div>
+            <input 
+              type="date" 
+              value={fechaFiltro} 
+              onChange={e => setFechaFiltro(e.target.value)} 
+              className="input-field cursor-pointer" 
+            />
+          </div>
+
+          {/* Botones de Estado con Conteos Integrados */}
+          <div className="md:col-span-8">
+            <label className="label">Estado de la Cita</label>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 p-1 bg-slate-100 border border-slate-200 rounded-xl">
+              {[
+                { val: "", label: "Todas", count: countTodas },
+                { val: "pendiente", label: "Pendientes", count: countPendientes },
+                { val: "atendida", label: "Atendidas", count: countAtendidas },
+                { val: "cancelada", label: "Canceladas", count: countCanceladas }
+              ].map(btn => (
+                <button 
+                  key={btn.val} 
+                  type="button" 
+                  onClick={() => setEstadoFiltro(btn.val)}
+                  className={`py-2 px-2.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 select-none ${
+                    estadoFiltro === btn.val 
+                      ? "bg-white text-sky-700 shadow-xs border border-slate-200" 
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}>
+                  <span>{btn.label}</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
+                    estadoFiltro === btn.val ? "bg-sky-100 text-sky-800" : "bg-slate-200 text-slate-600"
+                  }`}>
+                    {btn.count}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Error */}
+      {/* Alerta de Error */}
       {error && (
-        <div className="flex items-center gap-3 p-4 rounded-xl border text-sm"
-          style={{ backgroundColor: "var(--color-danger-bg)", borderColor: "var(--color-danger)", color: "var(--color-danger)" }}>
-          <WarningCircle size={18} weight="bold" style={{ flexShrink: 0 }} />
-          <span className="font-semibold">{error}</span>
+        <div className="flex items-center gap-3 p-4 rounded-xl border border-rose-200 bg-rose-50 text-rose-800 text-sm font-semibold">
+          <WarningCircle size={18} weight="bold" className="flex-shrink-0 text-rose-600" />
+          <span>{error}</span>
         </div>
       )}
 
-      {/* Table */}
+      {/* Lista / Tabla de Citas */}
       {loading ? (
-        <div className="card flex flex-col items-center justify-center py-16 gap-3">
-          <div className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin"
-            style={{ borderColor: "var(--color-primary)", borderTopColor: "transparent" }} />
-          <p className="text-xs font-bold uppercase tracking-wider" style={{ color: "var(--color-muted)" }}>Cargando agenda...</p>
+        <div className="bg-white border border-slate-200 rounded-2xl flex flex-col items-center justify-center py-16 gap-3">
+          <div className="w-8 h-8 rounded-full border-2 border-sky-600 border-t-transparent animate-spin" />
+          <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Cargando agenda...</p>
         </div>
       ) : citas.length === 0 ? (
-        <div className="card flex flex-col items-center justify-center py-16 text-center">
-          <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl mb-4"
-            style={{ backgroundColor: "var(--color-primary-lt)", border: "1.5px solid var(--color-primary-bd)" }}>📅</div>
-          <h3 className="font-bold text-base" style={{ color: "var(--color-text)", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Sin citas registradas</h3>
-          <p className="text-sm mt-1.5" style={{ color: "var(--color-muted)" }}>
-            No hay citas en los filtros seleccionados. {isAdminOrRec && "Agrega una nueva cita arriba."}
+        /* Empty State General (No hay ninguna cita para la fecha) */
+        <div className="bg-white border border-slate-200 rounded-2xl flex flex-col items-center justify-center py-14 px-6 text-center shadow-xs">
+          <div className="w-16 h-16 rounded-2xl bg-sky-50 border border-sky-200 text-sky-600 flex items-center justify-center text-3xl mb-4 shadow-xs">
+            📅
+          </div>
+          <h3 className="font-bold text-lg text-slate-900">
+            No hay citas registradas para este día
+          </h3>
+          <p className="text-sm text-slate-500 mt-1 max-w-md">
+            No se encontraron consultas agendadas para la fecha <strong className="capitalize">{formatDateDisplay(fechaFiltro)}</strong>.
           </p>
+
+          <div className="flex items-center justify-center gap-3 mt-6 flex-wrap">
+            {isAdminOrRec && (
+              <button 
+                onClick={() => setModalOpen(true)}
+                className="btn-action-create">
+                <Plus size={16} weight="bold" />
+                <span>Agendar Cita para esta Fecha</span>
+              </button>
+            )}
+            <button 
+              onClick={() => { setFechaFiltro(todayStr); setEstadoFiltro(""); }}
+              className="btn-action-secondary">
+              <ArrowCounterClockwise size={15} />
+              <span>Ver Citas de Hoy</span>
+            </button>
+          </div>
+        </div>
+      ) : citasFiltradas.length === 0 ? (
+        /* Empty State por Filtro (Hay citas en el día, pero ninguna con este estado) */
+        <div className="bg-white border border-slate-200 rounded-2xl flex flex-col items-center justify-center py-12 px-6 text-center shadow-xs">
+          <div className="w-14 h-14 rounded-2xl bg-slate-100 border border-slate-200 text-slate-500 flex items-center justify-center text-2xl mb-3 shadow-xs">
+            🔍
+          </div>
+          <h3 className="font-bold text-base text-slate-900">
+            No hay citas con estado "{estadoFiltro}"
+          </h3>
+          <p className="text-xs text-slate-500 mt-1 max-w-md">
+            Hay {citas.length} {citas.length === 1 ? "cita registrada" : "citas registradas"} para esta fecha, pero ninguna se encuentra en estado <strong className="capitalize">{estadoFiltro}</strong>.
+          </p>
+          <div className="mt-4">
+            <button 
+              onClick={() => setEstadoFiltro("")}
+              className="btn-action-secondary text-xs">
+              <ArrowCounterClockwise size={14} />
+              <span>Ver Todas las Citas ({countTodas})</span>
+            </button>
+          </div>
         </div>
       ) : (
-        <div className="card p-0 overflow-hidden">
+        <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr style={{ backgroundColor: "var(--color-primary-lt)", borderBottom: "1.5px solid var(--color-border)" }}>
+                <tr className="bg-slate-50 border-b border-slate-200">
                   {["Hora", "Paciente", "Propietario", "Atiende", "Motivo", "Estado", "Acciones"].map(h => (
-                    <th key={h} className="px-5 py-3.5 font-bold uppercase text-[11px] tracking-wider select-none"
-                      style={{ color: "var(--color-muted)", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap" }}>
+                    <th key={h} className="px-5 py-3.5 font-bold uppercase text-[11px] tracking-wider text-slate-500 whitespace-nowrap">
                       {h}
                     </th>
                   ))}
                 </tr>
               </thead>
-              <tbody>
-                {citas.map((cita, i) => {
+              <tbody className="divide-y divide-slate-100">
+                {citasFiltradas.map((cita) => {
                   const est = ESTADO_STYLES[cita.estado] ?? ESTADO_STYLES.pendiente;
                   return (
-                    <tr key={cita.id} style={{ borderBottom: "1px solid var(--color-border)", backgroundColor: i % 2 === 0 ? "white" : "var(--color-primary-lt)" }}>
+                    <tr key={cita.id} className="hover:bg-slate-50/80 transition-colors">
                       <td className="px-5 py-3.5 whitespace-nowrap">
-                        <span className="font-bold text-base" style={{ color: "var(--color-text)", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        <span className="font-extrabold text-sm text-slate-900 flex items-center gap-1.5">
+                          <Clock size={15} className="text-sky-600" />
                           {formatTime(cita.fecha_hora)}
                         </span>
                       </td>
                       <td className="px-5 py-3.5 whitespace-nowrap">
                         <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-xl flex items-center justify-center text-base flex-shrink-0"
-                            style={{ backgroundColor: "var(--color-primary-lt)", border: "1px solid var(--color-primary-bd)" }}>
+                          <div className="w-8 h-8 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-base flex-shrink-0">
                             {getEspecieEmoji(cita.especie)}
                           </div>
                           <div>
-                            <p className="font-bold text-sm leading-none" style={{ color: "var(--color-text)", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{cita.mascota_nombre}</p>
-                            <p className="text-[10px] uppercase font-bold tracking-wider mt-0.5" style={{ color: "var(--color-muted)" }}>{cita.especie}</p>
+                            <p className="font-bold text-sm text-slate-900 leading-none">{cita.mascota_nombre}</p>
+                            <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400 mt-0.5">{cita.especie}</p>
                           </div>
                         </div>
                       </td>
                       <td className="px-5 py-3.5 whitespace-nowrap">
-                        <p className="font-semibold text-sm flex items-center gap-1.5" style={{ color: "var(--color-text)" }}>
-                          <User size={13} style={{ color: "var(--color-muted)", flexShrink: 0 }} />{cita.cliente_nombre}
+                        <p className="font-semibold text-xs text-slate-800 flex items-center gap-1.5">
+                          <User size={13} className="text-slate-400" />
+                          {cita.cliente_nombre}
                         </p>
-                        <p className="text-xs flex items-center gap-1 mt-0.5" style={{ color: "var(--color-muted)" }}>
-                          <Phone size={11} style={{ flexShrink: 0 }} />{cita.telefono}
+                        <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
+                          <Phone size={11} className="text-slate-400" />
+                          {cita.telefono}
                         </p>
                       </td>
                       <td className="px-5 py-3.5 whitespace-nowrap">
-                        <span className="flex items-center gap-1.5 text-sm font-medium" style={{ color: "var(--color-text)" }}>
-                          <Stethoscope size={15} style={{ color: "var(--color-primary)" }} />Dr. {cita.veterinario_nombre}
+                        <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-800">
+                          <Stethoscope size={15} className="text-sky-600" />
+                          Dr(a). {cita.veterinario_nombre}
                         </span>
                       </td>
-                      <td className="px-5 py-3.5 max-w-[180px] truncate text-sm" style={{ color: "var(--color-muted)" }} title={cita.motivo}>
+                      <td className="px-5 py-3.5 max-w-[200px] truncate text-xs text-slate-600" title={cita.motivo}>
                         <span className="flex items-center gap-1">
-                          <Chat size={13} style={{ flexShrink: 0 }} />{cita.motivo}
+                          <Chat size={13} className="text-slate-400 flex-shrink-0" />
+                          {cita.motivo}
                         </span>
                       </td>
                       <td className="px-5 py-3.5 whitespace-nowrap">
-                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wide"
-                          style={{ backgroundColor: est.bg, color: est.color }}>
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-extrabold uppercase tracking-wide border ${est.bg}`}>
                           {est.label}
                         </span>
                       </td>
@@ -306,29 +439,33 @@ export default function AgendaPage() {
                         <div className="flex items-center gap-1.5 justify-end">
                           {cita.estado === "pendiente" && (
                             <>
-                              <button onClick={() => handleUpdateStatus(cita.id, "atendida")} title="Marcar atendida"
-                                className="w-8 h-8 rounded-lg border flex items-center justify-center transition-all active:scale-90"
-                                style={{ borderColor: "var(--color-success)", color: "var(--color-success)", backgroundColor: "var(--color-success-bg)" }}>
+                              <button 
+                                onClick={() => handleUpdateStatus(cita.id, "atendida")} 
+                                title="Marcar como atendida"
+                                className="w-8 h-8 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white flex items-center justify-center transition-all active:scale-90 shadow-2xs">
                                 <Check size={14} weight="bold" />
                               </button>
-                              <button onClick={() => handleUpdateStatus(cita.id, "cancelada")} title="Cancelar cita"
-                                className="w-8 h-8 rounded-lg border flex items-center justify-center transition-all active:scale-90"
-                                style={{ borderColor: "var(--color-danger)", color: "var(--color-danger)", backgroundColor: "var(--color-danger-bg)" }}>
+                              <button 
+                                onClick={() => handleUpdateStatus(cita.id, "cancelada")} 
+                                title="Cancelar cita"
+                                className="w-8 h-8 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-600 hover:text-white flex items-center justify-center transition-all active:scale-90 shadow-2xs">
                                 <X size={14} weight="bold" />
                               </button>
                             </>
                           )}
                           {cita.estado !== "pendiente" && (
-                            <button onClick={() => handleUpdateStatus(cita.id, "pendiente")} title="Restablecer"
-                              className="px-2.5 py-1.5 rounded-lg border text-xs font-bold uppercase tracking-wide transition-all"
-                              style={{ borderColor: "var(--color-border)", color: "var(--color-muted)", backgroundColor: "white" }}>
+                            <button 
+                              onClick={() => handleUpdateStatus(cita.id, "pendiente")} 
+                              title="Restablecer a pendiente"
+                              className="px-2.5 py-1 rounded-lg border border-slate-200 text-slate-600 bg-slate-50 hover:bg-slate-100 text-[11px] font-bold uppercase transition-all">
                               Restablecer
                             </button>
                           )}
                           {isAdminOrRec && (
-                            <button onClick={() => handleDelete(cita.id)} title="Eliminar"
-                              className="w-8 h-8 rounded-lg border flex items-center justify-center transition-all active:scale-90 ml-1"
-                              style={{ borderColor: "var(--color-danger)", color: "var(--color-danger)", backgroundColor: "var(--color-danger-bg)" }}>
+                            <button 
+                              onClick={() => handleDelete(cita.id)} 
+                              title="Eliminar cita"
+                              className="w-8 h-8 rounded-lg border border-slate-200 text-slate-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition-all active:scale-90 ml-1">
                               <Trash size={14} />
                             </button>
                           )}
@@ -343,140 +480,236 @@ export default function AgendaPage() {
         </div>
       )}
 
-      {/* Modal */}
+      {/* ── MODAL "AGENDAR NUEVA CITA" — Rediseñado al Dark Theme Integrado ── */}
       {modalOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="w-full max-w-lg rounded-2xl border overflow-hidden"
-            style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)", boxShadow: "var(--shadow-modal)" }}>
+        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="w-full max-w-xl rounded-2xl border border-slate-800 bg-[#0F172A] text-slate-100 shadow-2xl overflow-hidden">
 
             {/* Modal Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b"
-              style={{ backgroundColor: "var(--color-primary-lt)", borderColor: "var(--color-border)" }}>
-              <h2 className="font-bold text-base" style={{ color: "var(--color-text)", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                Agendar Nueva Cita
-              </h2>
-              <button onClick={() => { setModalOpen(false); setSelectedCliente(null); setClienteQuery(""); setSelectedMascotaId(""); setSelectedUsuarioId(""); setFechaHoraInput(""); setMotivoInput(""); setFormError(""); }}
-                className="w-8 h-8 rounded-lg flex items-center justify-center transition-all"
-                style={{ color: "var(--color-muted)", backgroundColor: "var(--color-border)" }}>
-                <X size={16} weight="bold" />
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/90">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-sky-600 text-white flex items-center justify-center font-bold">
+                  <CalendarBlank size={18} weight="bold" />
+                </div>
+                <h2 className="font-extrabold text-base text-white tracking-tight">
+                  Agendar Nueva Cita Médica
+                </h2>
+              </div>
+              <button 
+                onClick={() => { 
+                  setModalOpen(false); 
+                  setSelectedCliente(null); 
+                  setClienteQuery(""); 
+                  setSelectedMascotaId(""); 
+                  setSelectedUsuarioId(""); 
+                  setMotivoInput(""); 
+                  setFormError(""); 
+                  setInvalidFields({});
+                }}
+                className="w-8 h-8 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 flex items-center justify-center transition-all">
+                <X size={18} weight="bold" />
               </button>
             </div>
 
-            {/* Modal Form */}
+            {/* Formulario del Modal */}
             <form onSubmit={handleBook} className="p-6 space-y-4">
+              
+              {/* Alerta de Error con Validación Visible */}
               {formError && (
-                <div className="flex items-center gap-2.5 p-3 rounded-xl border text-sm"
-                  style={{ backgroundColor: "var(--color-danger-bg)", borderColor: "var(--color-danger)", color: "var(--color-danger)" }}>
-                  <WarningCircle size={16} weight="bold" style={{ flexShrink: 0 }} />{formError}
+                <div className="flex items-center gap-2.5 p-3.5 rounded-xl border border-rose-500/30 bg-rose-950/40 text-rose-300 text-xs font-semibold">
+                  <WarningCircle size={18} weight="bold" className="flex-shrink-0 text-rose-400" />
+                  <span>{formError}</span>
                 </div>
               )}
 
-              {/* Propietario */}
+              {/* 1. Propietario / Cliente (*) */}
               <div>
-                <label className="label">Propietario / Cliente</label>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
+                  Propietario / Cliente <span className="text-rose-400">*</span>
+                </label>
                 {!selectedCliente ? (
                   <div className="relative">
-                    <MagnifyingGlass size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: "var(--color-muted)" }} />
-                    <input type="text" placeholder="Buscar por nombre, telefono o correo..." value={clienteQuery}
-                      onChange={e => setClienteQuery(e.target.value)} className="input-field pl-10" />
+                    <MagnifyingGlass size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input 
+                      type="text" 
+                      placeholder="Buscar cliente por nombre, teléfono o cédula..." 
+                      value={clienteQuery}
+                      onChange={e => setClienteQuery(e.target.value)} 
+                      className={`w-full h-11 pl-10 pr-4 rounded-xl border bg-slate-900 text-white placeholder-slate-500 text-xs font-medium focus:outline-none focus:border-sky-500 ${
+                        invalidFields.cliente ? "border-rose-500" : "border-slate-700"
+                      }`} 
+                    />
                     {filteredClientes.length > 0 && (
-                      <div className="absolute w-full mt-1 bg-white border rounded-xl shadow-lg max-h-48 overflow-y-auto z-10 divide-y"
-                        style={{ borderColor: "var(--color-border)" }}>
+                      <div className="absolute w-full mt-1.5 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl max-h-48 overflow-y-auto z-20 divide-y divide-slate-800">
                         {filteredClientes.map(c => (
-                          <div key={c.id} onClick={() => { setSelectedCliente(c); setClienteQuery(""); setSelectedMascotaId(c.mascotas[0]?.id || ""); }}
-                            className="p-3 cursor-pointer transition-colors"
-                            style={{ color: "var(--color-text)" }}
-                            onMouseEnter={e => e.currentTarget.style.backgroundColor = "var(--color-primary-lt)"}
-                            onMouseLeave={e => e.currentTarget.style.backgroundColor = "white"}>
-                            <p className="font-bold text-sm">{c.nombre}</p>
-                            <p className="text-xs mt-0.5 uppercase tracking-wide" style={{ color: "var(--color-muted)" }}>{c.telefono} • {c.correo}</p>
+                          <div 
+                            key={c.id} 
+                            onClick={() => { 
+                              setSelectedCliente(c); 
+                              setClienteQuery(""); 
+                              setSelectedMascotaId(c.mascotas[0]?.id || ""); 
+                            }}
+                            className="p-3 cursor-pointer hover:bg-slate-800 transition-colors">
+                            <p className="font-bold text-xs text-white">{c.nombre}</p>
+                            <p className="text-[11px] text-slate-400 mt-0.5 uppercase tracking-wide">
+                              Tel: {c.telefono} • Correo: {c.correo}
+                            </p>
                           </div>
                         ))}
                       </div>
                     )}
-                    {clienteQuery.trim().length > 1 && filteredClientes.length === 0 && (
-                      <div className="absolute w-full mt-1 bg-white border rounded-xl p-3 shadow-lg z-10 text-sm italic"
-                        style={{ borderColor: "var(--color-border)", color: "var(--color-muted)" }}>
-                        No se encontraron clientes.
-                      </div>
-                    )}
                   </div>
                 ) : (
-                  <div className="flex items-center justify-between p-3.5 rounded-xl border"
-                    style={{ backgroundColor: "var(--color-primary-lt)", borderColor: "var(--color-primary-bd)" }}>
+                  <div className="flex items-center justify-between p-3 rounded-xl border border-sky-500/40 bg-sky-950/30">
                     <div>
-                      <p className="font-bold text-sm" style={{ color: "var(--color-primary)", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{selectedCliente.nombre}</p>
-                      <p className="text-xs mt-0.5" style={{ color: "var(--color-muted)" }}>{selectedCliente.telefono} • {selectedCliente.correo}</p>
+                      <p className="font-bold text-xs text-sky-300">{selectedCliente.nombre}</p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">Tel: {selectedCliente.telefono} • {selectedCliente.correo}</p>
                     </div>
-                    <button type="button" onClick={() => { setSelectedCliente(null); setSelectedMascotaId(""); }}
-                      className="text-xs font-bold uppercase tracking-wide transition-all"
-                      style={{ color: "var(--color-danger)" }}>
+                    <button 
+                      type="button" 
+                      onClick={() => { setSelectedCliente(null); setSelectedMascotaId(""); }}
+                      className="text-xs font-bold uppercase tracking-wider text-rose-400 hover:text-rose-300">
                       Cambiar
                     </button>
                   </div>
                 )}
               </div>
 
-              {/* Mascota */}
+              {/* 2. Seleccionar Mascota (*) */}
               {selectedCliente && (
                 <div className="animate-fade-in">
-                  <label className="label">Mascota de {selectedCliente.nombre}</label>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
+                    Mascota de {selectedCliente.nombre} <span className="text-rose-400">*</span>
+                  </label>
                   {selectedCliente.mascotas.length === 0 ? (
-                    <div className="p-3 rounded-xl border text-sm" style={{ backgroundColor: "var(--color-warning-bg)", borderColor: "var(--color-warning)", color: "var(--color-warning)" }}>
-                      <WarningCircle size={15} style={{ display: "inline", marginRight: "6px" }} />Este cliente no tiene mascotas registradas.
+                    <div className="p-3 rounded-xl border border-amber-500/30 bg-amber-950/30 text-amber-300 text-xs">
+                      ⚠️ Este cliente no tiene mascotas registradas. Registra una mascota antes de agendar la cita.
                     </div>
                   ) : (
-                    <select value={selectedMascotaId} onChange={e => setSelectedMascotaId(e.target.value)} className="input-field">
+                    <select 
+                      value={selectedMascotaId} 
+                      onChange={e => setSelectedMascotaId(e.target.value)} 
+                      className={`w-full h-11 px-3.5 rounded-xl border bg-slate-900 text-white text-xs font-medium focus:outline-none focus:border-sky-500 ${
+                        invalidFields.mascota ? "border-rose-500" : "border-slate-700"
+                      }`}>
                       <option value="" disabled>-- Selecciona la mascota --</option>
                       {selectedCliente.mascotas.map(m => (
-                        <option key={m.id} value={m.id}>{getEspecieEmoji(m.especie)} {m.nombre} ({m.especie} • {m.raza})</option>
+                        <option key={m.id} value={m.id}>
+                          {getEspecieEmoji(m.especie)} {m.nombre} ({m.especie} • {m.raza})
+                        </option>
                       ))}
                     </select>
                   )}
                 </div>
               )}
 
-              {/* Veterinario */}
+              {/* 3. Veterinario que atiende (Datos reales del sistema) (*) */}
               <div>
-                <label className="label">Veterinario que atiende</label>
-                <select value={selectedUsuarioId} onChange={e => setSelectedUsuarioId(e.target.value)} className="input-field">
-                  <option value="" disabled>-- Selecciona un profesional --</option>
-                  {veterinarios.map(v => (<option key={v.id} value={v.id}>Dr(a). {v.nombre}</option>))}
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
+                  Veterinario que Atiende <span className="text-rose-400">*</span>
+                </label>
+                <select 
+                  value={selectedUsuarioId} 
+                  onChange={e => setSelectedUsuarioId(e.target.value)} 
+                  className={`w-full h-11 px-3.5 rounded-xl border bg-slate-900 text-white text-xs font-medium focus:outline-none focus:border-sky-500 ${
+                    invalidFields.veterinario ? "border-rose-500" : "border-slate-700"
+                  }`}>
+                  <option value="" disabled>-- Selecciona un profesional médico --</option>
+                  {veterinarios.map(v => (
+                    <option key={v.id} value={v.id}>
+                      Dr(a). {v.nombre}
+                    </option>
+                  ))}
                 </select>
               </div>
 
-              {/* Fecha y hora */}
-              <div>
-                <label className="label">Fecha y Hora</label>
-                <input type="datetime-local" value={fechaHoraInput} onChange={e => setFechaHoraInput(e.target.value)} className="input-field" />
+              {/* 4. Fecha y Hora en Campos Separados (Sin placeholder feo "dd/mm/aaaa --:--") */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
+                    Fecha de la Cita <span className="text-rose-400">*</span>
+                  </label>
+                  <input 
+                    type="date" 
+                    value={fechaInput} 
+                    onChange={e => setFechaInput(e.target.value)} 
+                    className={`w-full h-11 px-3.5 rounded-xl border bg-slate-900 text-white text-xs font-medium focus:outline-none focus:border-sky-500 cursor-pointer ${
+                      invalidFields.fecha ? "border-rose-500" : "border-slate-700"
+                    }`} 
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
+                    Hora de la Cita <span className="text-rose-400">*</span>
+                  </label>
+                  <input 
+                    type="time" 
+                    value={horaInput} 
+                    onChange={e => setHoraInput(e.target.value)} 
+                    className={`w-full h-11 px-3.5 rounded-xl border bg-slate-900 text-white text-xs font-medium focus:outline-none focus:border-sky-500 cursor-pointer ${
+                      invalidFields.hora ? "border-rose-500" : "border-slate-700"
+                    }`} 
+                  />
+                </div>
               </div>
 
-              {/* Motivo */}
+              {/* 5. Motivo de Consulta (*) */}
               <div>
-                <label className="label">Motivo de consulta</label>
-                <textarea placeholder="Chequeo preventivo, vacunas, malestar general..." value={motivoInput}
-                  onChange={e => setMotivoInput(e.target.value)} rows="3"
-                  className="w-full p-4 rounded-xl border bg-white text-sm focus:outline-none transition-all"
-                  style={{ borderColor: "var(--color-border)", color: "var(--color-text)", resize: "none", fontFamily: "'Inter', sans-serif" }}
-                  onFocus={e => { e.target.style.borderColor = "var(--color-primary)"; e.target.style.boxShadow = "0 0 0 3px rgba(29,75,88,0.08)"; }}
-                  onBlur={e => { e.target.style.borderColor = "var(--color-border)"; e.target.style.boxShadow = "none"; }}
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
+                  Motivo de la Consulta <span className="text-rose-400">*</span>
+                </label>
+                <textarea 
+                  placeholder="Describa el motivo médico (ej. vacunación anual, desparasitación, control preventivo)..." 
+                  value={motivoInput}
+                  onChange={e => setMotivoInput(e.target.value)} 
+                  rows="2"
+                  className={`w-full p-3.5 rounded-xl border bg-slate-900 text-white text-xs placeholder-slate-500 focus:outline-none focus:border-sky-500 resize-none ${
+                    invalidFields.motivo ? "border-rose-500" : "border-slate-700"
+                  }`}
                 />
               </div>
 
-              {/* Actions */}
-              <div className="flex justify-end gap-3 pt-2 border-t" style={{ borderColor: "var(--color-border)" }}>
-                <button type="button" onClick={() => { setModalOpen(false); setSelectedCliente(null); setClienteQuery(""); setSelectedMascotaId(""); setSelectedUsuarioId(""); setFechaHoraInput(""); setMotivoInput(""); setFormError(""); }}
-                  className="btn-premium-secondary" disabled={guardando}>
-                  <span>Cancelar</span>
+              {/* Botones de Acción Unificados con el Sistema Semántico de Marca */}
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+                <button 
+                  type="button" 
+                  onClick={() => { 
+                    setModalOpen(false); 
+                    setSelectedCliente(null); 
+                    setClienteQuery(""); 
+                    setSelectedMascotaId(""); 
+                    setSelectedUsuarioId(""); 
+                    setMotivoInput(""); 
+                    setFormError(""); 
+                    setInvalidFields({});
+                  }}
+                  className="px-4 py-2.5 h-11 rounded-xl font-bold text-xs text-slate-300 hover:text-white border border-slate-700 hover:bg-slate-800 transition-all" 
+                  disabled={guardando}>
+                  Cancelar
                 </button>
-                <button type="submit" className="btn-premium-primary" disabled={guardando}>
-                  {guardando ? (<><Spinner size="sm" />Procesando...</>) : (<><span>Agendar Cita</span><div className="btn-icon-wrapper"><Check size={13} weight="bold" /></div></>)}
+                <button 
+                  type="submit" 
+                  className="btn-action-create" 
+                  disabled={guardando}>
+                  {guardando ? (
+                    <>
+                      <Spinner size="sm" />
+                      <span>Agendando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check size={16} weight="bold" />
+                      <span>Confirmar y Agendar Cita</span>
+                    </>
+                  )}
                 </button>
               </div>
+
             </form>
           </div>
         </div>
       )}
+
     </div>
   );
 }

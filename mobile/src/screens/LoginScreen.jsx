@@ -15,7 +15,7 @@ import {
 import { ENDPOINTS } from '../config/apiConfig';
 import { guardarToken, guardarUsuario } from '../utils/authStorage';
 
-export default function LoginScreen({ onLoginSuccess, onNavigateToRegister }) {
+export default function LoginScreen({ onLoginSuccess, onNavigateToRegister, onNavigateToForgotPassword }) {
   const [cedula, setCedula] = useState('');
   const [password, setPassword] = useState('');
   const [cargando, setCargando] = useState(false);
@@ -174,6 +174,19 @@ export default function LoginScreen({ onLoginSuccess, onNavigateToRegister }) {
               )}
             </TouchableOpacity>
 
+            {/* Enlace: Recuperar contraseña */}
+            <TouchableOpacity
+              style={styles.forgotLink}
+              onPress={onNavigateToForgotPassword}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.forgotLinkText}>¿Olvidaste tu contraseña?</Text>
+            </TouchableOpacity>
+
+            {/* Separador visual */}
+            <View style={styles.divider} />
+
+            {/* Enlace: Registro de cliente y mascota */}
             <TouchableOpacity
               style={styles.secondaryLink}
               onPress={onNavigateToRegister}
@@ -318,8 +331,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
-  secondaryLink: {
+  forgotLink: {
+    marginTop: 18,
+    alignItems: 'center',
+  },
+  forgotLinkText: {
+    color: '#0284C7',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#E2E8F0',
     marginTop: 20,
+    marginHorizontal: 8,
+  },
+  secondaryLink: {
+    marginTop: 16,
     alignItems: 'center',
   },
   secondaryLinkText: {

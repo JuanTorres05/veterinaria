@@ -10,6 +10,7 @@ export const API_BASE_URL = 'http://10.48.73.97:3000/api';
 // Mapeo de rutas de nuestro Backend Express
 export const ENDPOINTS = {
   LOGIN: `${API_BASE_URL}/auth/login`,               // POST: Autenticación
+  RECUPERAR_PASSWORD: `${API_BASE_URL}/auth/recuperar-password`, // POST: Recuperación de contraseña
   REGISTRAR_CLIENTE: `${API_BASE_URL}/clientes/registrar`, // POST: Registro unificado
   LISTAR_CLIENTES: `${API_BASE_URL}/clientes`,         // GET: Ruta protegida
   LISTAR_VETERINARIOS: `${API_BASE_URL}/auth/veterinarios`, // GET: Ruta protegida

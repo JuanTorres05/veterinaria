@@ -11,6 +11,7 @@ import FichaMascotaPage from './pages/FichaMascotaPage';
 import UnauthorizedPage from './pages/UnauthorizedPage';
 import ReportesPage from './pages/ReportesPage';
 import MonitoreoPage from './pages/MonitoreoPage';
+import UsuariosPage from './pages/UsuariosPage';
 
 export default function App() {
   return (
@@ -45,8 +46,16 @@ export default function App() {
             <Route
               path="/reportes"
               element={
-                <PrivateRoute roles={['admin', 'veterinario']}>
+                <PrivateRoute roles={['admin']}>
                   <ReportesPage />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/usuarios"
+              element={
+                <PrivateRoute roles={['admin']}>
+                  <UsuariosPage />
                 </PrivateRoute>
               }
             />

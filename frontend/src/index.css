@@ -4,31 +4,35 @@
 @tailwind components;
 @tailwind utilities;
 
-/* â”€â”€ CSS Variables (Design Tokens) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── CSS Variables (Design Tokens Unificados DataVet) ────────────────────── */
 :root {
-  --color-primary:     #1D4B58; /* Slate Teal profundo */
-  --color-primary-dk:  #13323B; /* Slate Teal hover */
-  --color-primary-lt:  #F2F6F7; /* Fondo acento / Warm light */
-  --color-primary-bd:  #D5E2E4; /* Borde primario sutil */
+  --color-primary:     #0F172A; /* Slate Navy Oscuro */
+  --color-primary-dk:  #020617; /* Darkest Slate */
+  --color-primary-lt:  #F8FAFC; /* Warm light canvas */
+  --color-primary-bd:  #E2E8F0; /* Slate border */
   
-  --color-bg:          #FAFBFB; /* Fondo general cÃ¡lido clÃ­nico */
+  --color-accent:      #0284C7; /* Cyan / Sky Brand Accent */
+  --color-accent-hover:#0369A1;
+  --color-accent-lt:   #F0F9FF;
+
+  --color-bg:          #F8FAFC; /* Fondo general claro sobrio */
   --color-surface:     #FFFFFF;
-  --color-border:      #EAF0F2; /* Borde gris azulado suave */
-  --color-text:        #182529; /* Inky Slate */
-  --color-muted:       #5C7278; /* Slate Muted */
+  --color-border:      #E2E8F0; /* Borde suave */
+  --color-text:        #0F172A; /* Slate 900 */
+  --color-muted:       #64748B; /* Slate 500 */
   
-  /* Colores semÃ¡nticos */
-  --color-success:     #2A8E79; /* Jade Menta */
-  --color-success-bg:  #EBF7F5;
-  --color-warning:     #D97706; /* Ãmbar */
+  /* Colores semánticos */
+  --color-success:     #059669; /* Verde Esmeralda (Navegación / Éxito) */
+  --color-success-bg:  #ECFDF5;
+  --color-warning:     #D97706; /* Ámbar / Naranja (Alertas) */
   --color-warning-bg:  #FEF3C7;
-  --color-danger:      #DC2626; /* Rojo */
-  --color-danger-bg:   #FEE2E2;
+  --color-danger:      #E11D48; /* Rojo / Rosa (Eliminar / Cancelar) */
+  --color-danger-bg:   #FFE4E6;
 
   /* Custom Spring Physics Animation */
-  --transition-spring: all 0.5s cubic-bezier(0.16, 1, 0.3, 1); /* MÃ¡s rÃ¡pida y fluida */
-  --shadow-ambient:    0 2px 12px -2px rgba(24, 37, 41, 0.03), 0 1px 4px -1px rgba(24, 37, 41, 0.02);
-  --shadow-modal:      0 20px 48px -10px rgba(24, 37, 41, 0.08);
+  --transition-spring: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  --shadow-ambient:    0 2px 12px -2px rgba(15, 23, 42, 0.04), 0 1px 4px -1px rgba(15, 23, 42, 0.02);
+  --shadow-modal:      0 20px 48px -10px rgba(15, 23, 42, 0.12);
 }
 
 @layer base {
@@ -49,15 +53,15 @@
     font-family: 'Plus Jakarta Sans', sans-serif;
   }
 
-  ::-webkit-scrollbar { width: 5px; height: 5px; }
-  ::-webkit-scrollbar-track { background: #FAFBFB; }
-  ::-webkit-scrollbar-thumb { background: #D5E2E4; border-radius: 9999px; }
-  ::-webkit-scrollbar-thumb:hover { background: #5C7278; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: #F8FAFC; }
+  ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 9999px; }
+  ::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
 }
 
 @layer components {
 
-  /* â”€â”€ Cards  â”€â”€ */
+  /* ── Cards  ───────────────────────────────────────────────────────────── */
   .card {
     @apply bg-white border rounded-2xl p-5;
     border-color: var(--color-border);
@@ -65,249 +69,130 @@
     transition: var(--transition-spring);
   }
   .card:hover {
-    box-shadow: 0 4px 20px -4px rgba(24, 37, 41, 0.06);
+    box-shadow: 0 4px 20px -4px rgba(15, 23, 42, 0.07);
   }
 
-  /* Legacy bezel cards â€” mantenidos para compatibilidad */
-  .bezel-card-outer {
-    @apply border transition-all;
-    border-color: var(--color-border);
-    background-color: rgba(234, 240, 242, 0.4);
-    border-radius: 1.25rem;
-    padding: 3px;
-    transition: var(--transition-spring);
-  }
+  /* ── Sistema Semántico de Botones ─────────────────────────────────────── */
   
-  .bezel-card-inner {
-    @apply bg-white p-5 border;
-    border-color: var(--color-border);
-    border-radius: calc(1.25rem - 3px);
-    box-shadow: var(--shadow-ambient);
-  }
-
-  /* â”€â”€ Buttons â”€â”€ */
-  .btn-premium-primary {
-    @apply inline-flex items-center justify-between gap-3 px-6 py-3 h-11
-           rounded-xl text-white font-semibold select-none
-           active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed;
-    font-size: 15px;
-    background-color: var(--color-primary);
+  /* Azul / Cian (Creación, Guardar, Registrar, Login) */
+  .btn-action-create {
+    @apply inline-flex items-center justify-between gap-2.5 px-5 py-2.5 h-11
+           rounded-xl text-white font-bold select-none active:scale-[0.98]
+           disabled:opacity-50 disabled:cursor-not-allowed shadow-md shadow-sky-950/20;
+    font-size: 14px;
+    background-color: #0284C7;
     font-family: 'Plus Jakarta Sans', sans-serif;
-    letter-spacing: -0.01em;
     transition: var(--transition-spring);
   }
-  .btn-premium-primary:hover {
-    background-color: var(--color-primary-dk);
-    box-shadow: 0 4px 16px rgba(29, 75, 88, 0.2);
+  .btn-action-create:hover {
+    background-color: #0369A1;
+    box-shadow: 0 4px 16px rgba(2, 132, 199, 0.25);
     transform: translateY(-1px);
   }
 
-  .btn-accent {
-    @apply inline-flex items-center justify-between gap-3 px-6 py-3 h-11
-           rounded-xl text-white font-semibold select-none
-           active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed;
-    font-size: 15px;
-    background-color: var(--color-success);
+  /* Verde Esmeralda (Navegación, Confirmación, Completar) */
+  .btn-action-nav {
+    @apply inline-flex items-center justify-between gap-2.5 px-5 py-2.5 h-11
+           rounded-xl text-white font-bold select-none active:scale-[0.98]
+           disabled:opacity-50 disabled:cursor-not-allowed shadow-md shadow-emerald-950/20;
+    font-size: 14px;
+    background-color: #059669;
     font-family: 'Plus Jakarta Sans', sans-serif;
     transition: var(--transition-spring);
   }
-  .btn-accent:hover {
-    background-color: #22766A;
-    box-shadow: 0 4px 16px rgba(42, 142, 121, 0.25);
+  .btn-action-nav:hover {
+    background-color: #047857;
+    box-shadow: 0 4px 16px rgba(5, 150, 105, 0.25);
     transform: translateY(-1px);
   }
 
-  .btn-premium-secondary {
-    @apply inline-flex items-center justify-between gap-3 px-6 py-3 h-11
-           rounded-xl font-semibold border select-none
-           active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed;
-    font-size: 15px;
-    border-color: var(--color-border);
-    color: var(--color-text);
-    background-color: white;
+  /* Secundario (Cancelar, Volver, Filtros) */
+  .btn-action-secondary {
+    @apply inline-flex items-center justify-between gap-2.5 px-4 py-2.5 h-11
+           rounded-xl font-semibold border select-none active:scale-[0.98]
+           disabled:opacity-50 disabled:cursor-not-allowed bg-white text-slate-700 border-slate-200;
+    font-size: 14px;
     font-family: 'Plus Jakarta Sans', sans-serif;
     transition: var(--transition-spring);
   }
-  .btn-premium-secondary:hover {
-    border-color: var(--color-primary-bd);
-    background-color: var(--color-primary-lt);
-    color: var(--color-primary);
+  .btn-action-secondary:hover {
+    border-color: #CBD5E1;
+    background-color: #F8FAFC;
+    color: #0F172A;
   }
 
-  .btn-premium-danger {
-    @apply inline-flex items-center justify-between gap-3 px-5 py-2.5 h-10
+  /* Rojo / Rosa (Eliminar, Cancelar Acción, Peligro) */
+  .btn-action-danger {
+    @apply inline-flex items-center justify-between gap-2.5 px-4 py-2 h-10
            rounded-xl text-white font-semibold text-sm select-none
-           active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed;
-    background-color: var(--color-danger);
+           active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed bg-rose-600;
     transition: var(--transition-spring);
   }
-  .btn-premium-danger:hover {
-    background-color: #B91C1C;
-    box-shadow: 0 4px 12px rgba(220, 38, 38, 0.2);
+  .btn-action-danger:hover {
+    background-color: #E11D48;
+    box-shadow: 0 4px 12px rgba(225, 29, 72, 0.2);
   }
 
-  .btn-icon-wrapper {
-    @apply w-5 h-5 rounded-lg flex items-center justify-center text-xs flex-shrink-0;
-    background-color: rgba(255, 255, 255, 0.2);
-  }
-  .btn-premium-secondary .btn-icon-wrapper {
-    background-color: rgba(29, 75, 88, 0.08);
-  }
+  /* Legacy aliases para compatibilidad con código existente */
+  .btn-premium-primary   { @apply btn-action-create; }
+  .btn-accent            { @apply btn-action-nav; }
+  .btn-premium-secondary { @apply btn-action-secondary; }
+  .btn-premium-danger    { @apply btn-action-danger; }
 
-  /* â”€â”€ Inputs â”€â”€ */
+  /* ── Inputs ───────────────────────────────────────────────────────────── */
   .input-field {
-    @apply w-full h-11 px-4 rounded-xl border
-           bg-white placeholder-gray-400;
-    font-size: 15px;
-    color: var(--color-text);
-    border-color: var(--color-border);
+    @apply w-full h-11 px-4 rounded-xl border bg-white placeholder-slate-400 text-slate-900 border-slate-200 font-medium;
+    font-size: 14px;
     transition: var(--transition-spring);
   }
   .input-field:hover {
-    border-color: var(--color-primary-bd);
+    border-color: #CBD5E1;
   }
   .input-field:focus {
     outline: none;
-    border-color: var(--color-primary);
-    box-shadow: 0 0 0 3px rgba(29, 75, 88, 0.08);
+    border-color: #0284C7;
+    box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.12);
   }
-
   .input-error {
-    border-color: var(--color-danger) !important;
-    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.06) !important;
+    border-color: #E11D48 !important;
+    box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.08) !important;
   }
 
   /* Labels */
   .label {
-    @apply block font-semibold uppercase tracking-wider mb-2;
+    @apply block font-bold uppercase tracking-wider mb-2 text-slate-500;
     font-size: 11px;
-    color: var(--color-muted);
     letter-spacing: 0.06em;
     font-family: 'Plus Jakarta Sans', sans-serif;
   }
 
-  /* â”€â”€ Badges â”€â”€ */
+  /* Badges */
   .badge {
-    @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold select-none uppercase tracking-wider;
+    @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-bold select-none uppercase tracking-wider;
     letter-spacing: 0.04em;
   }
-  .badge-green  { @apply badge; background-color: var(--color-success-bg); color: var(--color-success); }
-  .badge-yellow { @apply badge; background-color: var(--color-warning-bg); color: var(--color-warning); }
-  .badge-red    { @apply badge; background-color: var(--color-danger-bg); color: var(--color-danger); }
+  .badge-green  { @apply badge bg-emerald-100 text-emerald-800; }
+  .badge-yellow { @apply badge bg-amber-100 text-amber-800; }
+  .badge-blue   { @apply badge bg-sky-100 text-sky-800; }
+  .badge-red    { @apply badge bg-rose-100 text-rose-800; }
 
-  /* â”€â”€ Alerts â”€â”€ */
-  .alert {
-    @apply flex items-start gap-3 p-4 rounded-xl text-sm border;
-    transition: var(--transition-spring);
-  }
-  .alert-success {
-    @apply alert;
-    background-color: var(--color-success-bg);
-    border-color: var(--color-success);
-    color: var(--color-success);
-  }
-  .alert-error {
-    @apply alert;
-    background-color: var(--color-danger-bg);
-    border-color: var(--color-danger);
-    color: var(--color-danger);
-  }
-  .alert-warning {
-    @apply alert;
-    background-color: var(--color-warning-bg);
-    border-color: var(--color-warning);
-    color: var(--color-warning);
-  }
-
-  /* â”€â”€ Page title helper â”€â”€ */
-  .section-title {
-    @apply font-bold uppercase tracking-widest mb-4;
-    font-size: 11px;
-    color: var(--color-muted);
-    letter-spacing: 0.1em;
-    font-family: 'Plus Jakarta Sans', sans-serif;
-  }
+  /* Page title helper */
   .page-header   { @apply mb-6; }
   .page-title    {
     font-family: 'Plus Jakarta Sans', sans-serif;
     font-size: 24px;
-    font-weight: 700;
-    color: var(--color-text);
+    font-weight: 800;
+    color: #0F172A;
     letter-spacing: -0.02em;
   }
-  .page-subtitle { font-size: 15px; margin-top: 4px; color: var(--color-muted); }
+  .page-subtitle { font-size: 14px; margin-top: 4px; color: #64748B; }
 
-  /* â”€â”€ Stepper (Wizard Progress) â”€â”€ */
-  .stepper {
-    @apply flex items-center gap-0;
-  }
-  .stepper-step {
-    @apply flex items-center gap-2.5 flex-1;
-  }
-  .stepper-step:last-child {
-    @apply flex-none;
-  }
-  .stepper-circle {
-    @apply w-9 h-9 rounded-full flex items-center justify-center font-bold flex-shrink-0;
-    font-size: 13px;
-    font-family: 'Plus Jakarta Sans', sans-serif;
-    transition: var(--transition-spring);
-  }
-  .stepper-circle.done {
-    background-color: var(--color-success);
-    color: white;
-  }
-  .stepper-circle.active {
-    background-color: var(--color-primary);
-    color: white;
-    box-shadow: 0 0 0 4px rgba(29, 75, 88, 0.12);
-  }
-  .stepper-circle.pending {
-    background-color: var(--color-border);
-    color: var(--color-muted);
-  }
-  .stepper-label {
-    @apply font-semibold;
-    font-size: 13px;
-    font-family: 'Plus Jakarta Sans', sans-serif;
-    transition: color 0.3s ease;
-  }
-  .stepper-label.active  { color: var(--color-primary); }
-  .stepper-label.done    { color: var(--color-success); }
-  .stepper-label.pending { color: var(--color-muted); }
-  .stepper-connector {
-    @apply flex-1 h-px mx-3;
-    background-color: var(--color-border);
-    transition: background-color 0.4s ease;
-  }
-  .stepper-connector.done {
-    background-color: var(--color-success);
-  }
-
-  /* â”€â”€ Skeleton loaders â”€â”€ */
-  .skeleton {
-    @apply rounded-lg animate-pulse;
-    background: linear-gradient(90deg, #EAF0F2 25%, #F2F6F7 50%, #EAF0F2 75%);
-    background-size: 200% 100%;
-    animation: skeleton-wave 1.6s infinite;
-  }
-  @keyframes skeleton-wave {
-    0%   { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
-  }
-
-  /* â”€â”€ Fade in animation â”€â”€ */
+  /* Fade in animation */
   .animate-fade-in {
-    animation: fadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
   @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(8px); }
+    from { opacity: 0; transform: translateY(6px); }
     to   { opacity: 1; transform: translateY(0); }
   }
 }
-
-/* Modales */
-.modal-shadow {
-  box-shadow: var(--shadow-modal);
-}
-
