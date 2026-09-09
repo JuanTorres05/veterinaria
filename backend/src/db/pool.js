@@ -10,7 +10,9 @@ const pool = mysql.createPool({
   charset: 'utf8mb4',
   waitForConnections: true,
   connectionLimit: 10,
-  queueLimit: 0
+  queueLimit: 0,
+  // SEGURIDAD I5: cifrar la conexión con la BD en producción
+  ssl: env.nodeEnv === 'production' ? { rejectUnauthorized: true } : false
 });
 
 export default pool;

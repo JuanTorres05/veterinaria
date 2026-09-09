@@ -17,6 +17,7 @@ import { obtenerToken } from '../utils/authStorage';
 
 export default function RegisterScreen({ onNavigateToLogin }) {
   const [nombreCliente, setNombreCliente] = useState('');
+  const [cedulaCliente, setCedulaCliente] = useState('');
   const [telefonoCliente, setTelefonoCliente] = useState('');
   const [correoCliente, setCorreoCliente] = useState('');
 
@@ -32,13 +33,14 @@ export default function RegisterScreen({ onNavigateToLogin }) {
 
     if (
       !nombreCliente.trim() ||
+      !cedulaCliente.trim() ||
       !telefonoCliente.trim() ||
       !correoCliente.trim() ||
       !nombreMascota.trim() ||
       !especieMascota.trim() ||
       !razaMascota.trim()
     ) {
-      const msg = 'Por favor completa todos los datos del cliente y de la mascota.';
+      const msg = 'Por favor completa todos los datos obligatorios (incluyendo la cédula).';
       setErrorText(msg);
       Alert.alert('Campos Obligatorios', msg);
       return;
@@ -66,14 +68,15 @@ export default function RegisterScreen({ onNavigateToLogin }) {
       const bodyPayload = {
         cliente: {
           nombre: nombreCliente.trim(),
+          cedula: cedulaCliente.trim(),
           telefono: telefonoCliente.trim(),
           correo: correoCliente.trim().toLowerCase(),
         },
-        mascota: {
+        mascotas: [{
           nombre: nombreMascota.trim(),
           especie: especieMascota.trim(),
           raza: razaMascota.trim(),
-        },
+        }],
       };
 
       const response = await fetch(ENDPOINTS.REGISTRAR_CLIENTE, {
@@ -93,9 +96,9 @@ export default function RegisterScreen({ onNavigateToLogin }) {
           [{ text: 'Ir a Iniciar Sesión', onPress: onNavigateToLogin }]
         );
       } else if (response.status === 409) {
-        const msg = 'El correo electrónico ingresado ya se encuentra registrado.';
+        const msg = data.message || 'El cliente ya se encuentra registrado con esta cédula o correo electrónico.';
         setErrorText(msg);
-        Alert.alert('Registro Duplicado', msg);
+        Alert.alert('Cliente Duplicado', msg);
       } else if (response.status === 401 || response.status === 403) {
         const msg =
           data.message || 'Se requieren permisos de Recepcionista o Admin para registrar clientes.';
@@ -156,7 +159,7 @@ export default function RegisterScreen({ onNavigateToLogin }) {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Nombre Completo</Text>
+              <Text style={styles.label}>Nombre Completo *</Text>
               <TextInput
                 style={styles.input}
                 placeholder="Ej. Ana María García"
@@ -167,7 +170,19 @@ export default function RegisterScreen({ onNavigateToLogin }) {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Teléfono de Contacto</Text>
+              <Text style={styles.label}>Número de Cédula / Documento *</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Ej. 1098765432"
+                placeholderTextColor="#9CA3AF"
+                keyboardType="numeric"
+                value={cedulaCliente}
+                onChangeText={setCedulaCliente}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Teléfono de Contacto *</Text>
               <TextInput
                 style={styles.input}
                 placeholder="Ej. 3001234567"
@@ -179,7 +194,7 @@ export default function RegisterScreen({ onNavigateToLogin }) {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Correo Electrónico</Text>
+              <Text style={styles.label}>Correo Electrónico *</Text>
               <TextInput
                 style={styles.input}
                 placeholder="Ej. ana.garcia@correo.com"
@@ -197,7 +212,7 @@ export default function RegisterScreen({ onNavigateToLogin }) {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Nombre de la Mascota</Text>
+              <Text style={styles.label}>Nombre de la Mascota *</Text>
               <TextInput
                 style={styles.input}
                 placeholder="Ej. Max, Firulais, Michi"
@@ -209,7 +224,7 @@ export default function RegisterScreen({ onNavigateToLogin }) {
 
             <View style={styles.rowTwo}>
               <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-                <Text style={styles.label}>Especie</Text>
+                <Text style={styles.label}>Especie *</Text>
                 <TextInput
                   style={styles.input}
                   placeholder="Canino / Felino"
@@ -219,7 +234,7 @@ export default function RegisterScreen({ onNavigateToLogin }) {
                 />
               </View>
               <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
-                <Text style={styles.label}>Raza</Text>
+                <Text style={styles.label}>Raza *</Text>
                 <TextInput
                   style={styles.input}
                   placeholder="Ej. Golden Retriever"

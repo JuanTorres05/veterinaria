@@ -1,106 +1,25 @@
-import pool from '../../db/pool.js';
 import { NotFoundError } from '../../errors/http.errors.js';
+import * as mascotasRepository from './mascotas.repository.js';
 
-/**
- * Lista todas las mascotas de un cliente dado su ID.
- */
-export async function listarPorCliente(clienteId) {
-    const [mascotas] = await pool.execute(
-        `SELECT id, cliente_id, nombre, especie, raza, sexo, fecha_nacimiento, peso_kg, color, foto_url, created_at
-         FROM mascotas
-         WHERE cliente_id = ?
-         ORDER BY nombre ASC`,
-        [clienteId]
-    );
-    return mascotas;
-}
+export const listarPorCliente = mascotasRepository.listarPorCliente;
 
 export async function obtenerPorId(mascotaId) {
-    const [rows] = await pool.execute(
-        `SELECT 
-            m.id, m.nombre, m.especie, m.raza,
-            m.sexo, m.fecha_nacimiento, m.peso_kg, m.color, m.foto_url,
-            m.created_at,
-            c.id AS cliente_id, c.nombre AS cliente_nombre,
-            c.cedula AS cliente_cedula, c.telefono AS cliente_telefono,
-            c.correo AS cliente_correo, c.direccion AS cliente_direccion
-         FROM mascotas m
-         INNER JOIN clientes c ON c.id = m.cliente_id
-         WHERE m.id = ?
-         LIMIT 1`,
-        [mascotaId]
-    );
+  const mascota = await mascotasRepository.buscarFicha(mascotaId);
+  if (!mascota) throw new NotFoundError('Mascota no encontrada.');
 
-    if (rows.length === 0) {
-        throw new NotFoundError('Mascota no encontrada.');
-    }
+  const [historial, citas] = await Promise.all([
+    mascotasRepository.listarHistorial(mascotaId),
+    mascotasRepository.listarCitas(mascotaId)
+  ]);
 
-    const row = rows[0];
-
-    // Obtener historial clínico de la mascota
-    const [historial] = await pool.execute(
-        `SELECT h.id, h.fecha, h.motivo, h.diagnostico, h.tratamiento, h.notas, h.created_at,
-                u.nombre AS veterinario_nombre
-         FROM historial_clinico h
-         INNER JOIN usuarios u ON u.id = h.usuario_id
-         WHERE h.mascota_id = ?
-         ORDER BY h.fecha DESC`,
-        [mascotaId]
-    );
-
-    // Obtener citas de la mascota
-    const [citas] = await pool.execute(
-        `SELECT c.id, c.fecha_hora, c.motivo, c.estado, c.duracion_min, c.notas_cancelacion,
-                u.nombre AS veterinario_nombre
-         FROM citas c
-         LEFT JOIN usuarios u ON u.id = c.usuario_id
-         WHERE c.mascota_id = ? 
-         ORDER BY c.fecha_hora DESC`,
-        [mascotaId]
-    );
-
-    return {
-        id: row.id,
-        nombre: row.nombre,
-        especie: row.especie,
-        raza: row.raza,
-        sexo: row.sexo,
-        fechaNacimiento: row.fecha_nacimiento,
-        pesoKg: row.peso_kg,
-        color: row.color,
-        fotoUrl: row.foto_url,
-        createdAt: row.created_at,
-        cliente: {
-            id: row.cliente_id,
-            nombre: row.cliente_nombre,
-            cedula: row.cliente_cedula,
-            telefono: row.cliente_telefono,
-            correo: row.cliente_correo,
-            direccion: row.cliente_direccion
-        },
-        historial,
-        citas
-    };
+  return {
+    id: mascota.id, nombre: mascota.nombre, especie: mascota.especie, raza: mascota.raza,
+    sexo: mascota.sexo, fechaNacimiento: mascota.fecha_nacimiento, pesoKg: mascota.peso_kg,
+    color: mascota.color, fotoUrl: mascota.foto_url, createdAt: mascota.created_at,
+    cliente: { id: mascota.cliente_id, nombre: mascota.cliente_nombre, cedula: mascota.cliente_cedula,
+      telefono: mascota.cliente_telefono, correo: mascota.cliente_correo, direccion: mascota.cliente_direccion },
+    historial, citas
+  };
 }
 
-export async function crearHistorial({ mascota_id, usuario_id, fecha, motivo, diagnostico, tratamiento, notas }) {
-    const [result] = await pool.execute(
-        `INSERT INTO historial_clinico (mascota_id, usuario_id, fecha, motivo, diagnostico, tratamiento, notas)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [mascota_id, usuario_id, fecha, motivo, diagnostico, tratamiento, notas || null]
-    );
-
-    const newId = result.insertId;
-
-    const [rows] = await pool.execute(
-        `SELECT h.id, h.fecha, h.motivo, h.diagnostico, h.tratamiento, h.notas, h.created_at,
-                u.nombre AS veterinario_nombre
-         FROM historial_clinico h
-         INNER JOIN usuarios u ON u.id = h.usuario_id
-         WHERE h.id = ?
-         LIMIT 1`,
-        [newId]
-    );
-
-    return rows[0];
-}
+export const crearHistorial = mascotasRepository.crearHistorial;

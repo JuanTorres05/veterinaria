@@ -76,8 +76,9 @@ export default function LoginPage() {
       setForgotError("Por favor ingresa tu cédula.");
       return;
     }
-    if (!forgotCorreo.trim() || !forgotCorreo.includes("@")) {
-      setForgotError("Por favor ingresa un correo electrónico válido.");
+    const correoRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!forgotCorreo.trim() || !correoRegex.test(forgotCorreo.trim())) {
+      setForgotError("Por favor ingresa un correo electrónico válido (ej. usuario@correo.com).");
       return;
     }
 

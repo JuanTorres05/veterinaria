@@ -9,6 +9,8 @@ export async function login(req, res, next) {
   try {
     const payload = loginSchema.parse(req.body);
     const result = await authService.login(payload);
+    // SEGURIDAD: evitar que proxies intermedios cacheen el token JWT
+    res.setHeader('Cache-Control', 'no-store');
     return res.status(200).json(result);
   } catch (err) {
     return next(err);

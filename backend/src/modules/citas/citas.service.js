@@ -1,119 +1,24 @@
-import pool from '../../db/pool.js';
-import { NotFoundError } from '../../errors/http.errors.js';
+import { NotFoundError, ConflictError } from '../../errors/http.errors.js';
+import * as citasRepository from './citas.repository.js';
 
-// Query base reutilizable para citas con join completo
-const CITA_SELECT = `
-    SELECT 
-      c.id, 
-      c.fecha_hora, 
-      c.motivo,
-      c.duracion_min,
-      c.notas_cancelacion,
-      c.estado, 
-      c.created_at, 
-      m.id AS mascota_id,
-      m.nombre AS mascota_nombre, 
-      m.especie, 
-      c.usuario_id,
-      cl.nombre AS cliente_nombre, 
-      cl.telefono, 
-      u.nombre AS veterinario_nombre
-    FROM citas c
-    JOIN mascotas m ON m.id = c.mascota_id
-    JOIN clientes cl ON cl.id = m.cliente_id
-    JOIN usuarios u ON u.id = c.usuario_id
-`;
+export const listarCitas = citasRepository.listar;
 
-export async function listarCitas({ fecha, estado }) {
-  let query = CITA_SELECT;
-  
-  const conditions = [];
-  const params = [];
-
-  if (fecha) {
-    conditions.push('DATE(c.fecha_hora) = ?');
-    params.push(fecha);
+export async function crearCita(payload) {
+  const solapada = await citasRepository.buscarSolapada(payload.usuario_id, payload.fecha_hora);
+  if (solapada) {
+    throw new ConflictError('El profesional veterinario ya tiene una cita agendada en esta misma fecha y hora.');
   }
-
-  if (estado) {
-    conditions.push('c.estado = ?');
-    params.push(estado);
-  }
-
-  if (conditions.length > 0) {
-    query += ' WHERE ' + conditions.join(' AND ');
-  }
-
-  query += ' ORDER BY c.fecha_hora ASC';
-
-  const [rows] = await pool.execute(query, params);
-  return rows;
+  return citasRepository.crear({ ...payload, duracion_min: payload.duracion_min || 30 });
 }
 
-export async function crearCita({ mascota_id, usuario_id, fecha_hora, motivo, duracion_min }) {
-  const duracion = duracion_min ? Number(duracion_min) : 30;
-
-  const [result] = await pool.execute(
-    `INSERT INTO citas (mascota_id, usuario_id, fecha_hora, motivo, duracion_min, estado)
-     VALUES (?, ?, ?, ?, ?, 'pendiente')`,
-    [mascota_id, usuario_id, fecha_hora, motivo, duracion]
-  );
-
-  const newId = result.insertId;
-
-  const [rows] = await pool.execute(CITA_SELECT + ' WHERE c.id = ?', [newId]);
-  return rows[0];
-}
-
-export async function cambiarEstadoCita(id, estado, notas_cancelacion) {
-  // Si se cancela, guardamos las notas de cancelación
-  if (estado === 'cancelada' && notas_cancelacion) {
-    await pool.execute(
-      'UPDATE citas SET estado = ?, notas_cancelacion = ? WHERE id = ?',
-      [estado, notas_cancelacion, id]
-    );
-  } else {
-    const [result] = await pool.execute(
-      'UPDATE citas SET estado = ? WHERE id = ?',
-      [estado, id]
-    );
-
-    if (result.affectedRows === 0) {
-      throw new NotFoundError('La cita especificada no existe.');
-    }
-  }
-
-  const [rows] = await pool.execute(CITA_SELECT + ' WHERE c.id = ?', [id]);
-
-  if (rows.length === 0) {
-    throw new NotFoundError('La cita especificada no existe.');
-  }
-
-  return rows[0];
+export async function cambiarEstadoCita(id, estado, notasCancelacion) {
+  const updated = await citasRepository.actualizarEstado(id, estado, estado === 'cancelada' ? notasCancelacion : null);
+  if (!updated) throw new NotFoundError('La cita especificada no existe.');
+  return citasRepository.buscarPorId(id);
 }
 
 export async function eliminarCita(id) {
-  const [result] = await pool.execute(
-    'DELETE FROM citas WHERE id = ?',
-    [id]
-  );
-
-  if (result.affectedRows === 0) {
-    throw new NotFoundError('La cita especificada no existe.');
-  }
-
-  return true;
+  if (!await citasRepository.eliminar(id)) throw new NotFoundError('La cita especificada no existe.');
 }
 
-export async function obtenerStatsDashboard() {
-  const [[{ clientes }]] = await pool.execute('SELECT COUNT(*) AS clientes FROM clientes');
-  const [[{ mascotas }]] = await pool.execute('SELECT COUNT(*) AS mascotas FROM mascotas');
-  const [[{ citasHoy }]] = await pool.execute('SELECT COUNT(*) AS citasHoy FROM citas WHERE DATE(fecha_hora) = CURDATE()');
-  const [[{ veterinarios }]] = await pool.execute(
-    `SELECT COUNT(*) AS veterinarios FROM usuarios u 
-     INNER JOIN roles r ON r.id = u.rol_id 
-     WHERE r.nombre = 'veterinario' AND u.activo = 1`
-  );
-  
-  return { clientes, mascotas, citasHoy, veterinarios };
-}
+export const obtenerStatsDashboard = citasRepository.obtenerEstadisticas;

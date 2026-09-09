@@ -61,6 +61,7 @@ export default function PacientesPage() {
 
   const filteredClientes = clientes.filter(c =>
     c.nombre.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (c.cedula && c.cedula.toLowerCase().includes(searchQuery.toLowerCase())) ||
     c.telefono.includes(searchQuery) ||
     c.correo.toLowerCase().includes(searchQuery.toLowerCase()) ||
     c.mascotas.some(m => m.nombre.toLowerCase().includes(searchQuery.toLowerCase()) || m.especie.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -115,7 +116,7 @@ export default function PacientesPage() {
           <MagnifyingGlass size={17} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
-            placeholder="Buscar por cliente, teléfono, correo o nombre/especie de mascota..."
+            placeholder="Buscar por cédula, cliente, teléfono, correo o nombre/especie de mascota..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             className="w-full h-11 pl-10 pr-4 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400 text-xs font-medium focus:outline-none focus:border-sky-600 focus:bg-white transition-all"
@@ -188,7 +189,7 @@ export default function PacientesPage() {
                       {c.nombre}
                     </h3>
                     <p className="text-[11px] font-semibold text-slate-400 mt-0.5">
-                      Titular del Expediente
+                      {c.cedula ? `C.C. ${c.cedula}` : 'Titular del Expediente'}
                     </p>
                   </div>
                 </div>

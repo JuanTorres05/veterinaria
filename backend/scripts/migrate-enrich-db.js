@@ -1,6 +1,12 @@
 import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 dotenv.config();
 
 async function columnExists(conn, table, column) {
@@ -36,9 +42,14 @@ async function main() {
 
   // 1. Clientes
   await addColumnIfMissing(conn, 'clientes', 'apellido', 'VARCHAR(120) NULL AFTER `nombre`');
-  await addColumnIfMissing(conn, 'clientes', 'cedula', 'VARCHAR(20) NULL AFTER `id`');
+  await addColumnIfMissing(conn, 'clientes', 'cedula', 'VARCHAR(20) NOT NULL AFTER `id`');
   await addColumnIfMissing(conn, 'clientes', 'direccion', 'VARCHAR(255) NULL AFTER `correo`');
   await addColumnIfMissing(conn, 'clientes', 'activo', 'TINYINT(1) NOT NULL DEFAULT 1');
+  try {
+    await conn.query('ALTER TABLE `clientes` ADD UNIQUE INDEX `uq_clientes_cedula` (`cedula`)');
+  } catch {
+    // Si ya existe el índice único, se ignora
+  }
 
   // 2. Mascotas
   await addColumnIfMissing(conn, 'mascotas', 'sexo', "VARCHAR(20) DEFAULT 'Macho' AFTER `raza`");

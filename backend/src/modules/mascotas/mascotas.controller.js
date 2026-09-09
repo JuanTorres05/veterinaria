@@ -38,7 +38,7 @@ export async function registrarHistorial(req, res, next) {
         const payload = crearHistorialSchema.parse(req.body);
 
         // Obtener ID del veterinario (usuario logueado) del middleware de autenticación
-        const usuarioId = req.user.id;
+        const usuarioId = req.user.sub;
 
         const result = await mascotasService.crearHistorial({
             mascota_id: mascotaId,

@@ -12,6 +12,9 @@ const ROL_CONFIG = {
   recepcionista: { label: "Recepción",     icon: ClipboardText, badge: "bg-emerald-100 text-emerald-800 border-emerald-200" },
 };
 
+const nombreRegex = /^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s.'-]+$/;
+const cedulaRegex = /^[a-zA-Z0-9-]+$/;
+
 export default function UsuariosPage() {
   const [usuarios,     setUsuarios]     = useState([]);
   const [loading,      setLoading]      = useState(true);
@@ -61,11 +64,19 @@ export default function UsuariosPage() {
   // 1. Crear nuevo trabajador
   const handleCreateUser = async (e) => {
     e.preventDefault();
-    if (!cedulaInput.trim() || cedulaInput.trim().length < 6) {
+    const cedula = cedulaInput.trim();
+    if (!cedula || cedula.length < 6) {
       return setFormError("Ingresa una cédula válida (mínimo 6 caracteres).");
     }
-    if (!nombreInput.trim() || nombreInput.trim().length < 3) {
+    if (!cedulaRegex.test(cedula)) {
+      return setFormError("La cédula solo puede contener números, letras o guiones.");
+    }
+    const nombre = nombreInput.trim();
+    if (!nombre || nombre.length < 3) {
       return setFormError("Ingresa el nombre completo (mínimo 3 caracteres).");
+    }
+    if (!nombreRegex.test(nombre)) {
+      return setFormError("El nombre solo puede contener letras y espacios.");
     }
     if (!passwordInput || passwordInput.length < 6) {
       return setFormError("La contraseña debe tener al menos 6 caracteres.");

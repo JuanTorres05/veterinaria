@@ -2,78 +2,38 @@
 // Ahora acepta campos extendidos: cedula, direccion en clientes;
 // sexo, fecha_nacimiento, peso_kg, color en mascotas.
 
-import pool from '../../db/pool.js';
+import { ConflictError } from '../../errors/http.errors.js';
+import { withTransaction } from '../../db/transaction.js';
+import * as clientesRepository from './clientes.repository.js';
 
 export async function registrarClienteMascota({ cliente, mascotas }) {
-  const connection = await pool.getConnection();
+  // Validación de duplicados: No permitir registrar el mismo cliente
+  const clientePorCedula = await clientesRepository.buscarPorCedula(cliente.cedula);
+  if (clientePorCedula) {
+    throw new ConflictError(`El cliente ya se encuentra registrado con la cédula ${cliente.cedula} (${clientePorCedula.nombre}).`);
+  }
 
-  try {
-    await connection.beginTransaction();
+  const clientePorCorreo = await clientesRepository.buscarPorCorreo(cliente.correo);
+  if (clientePorCorreo) {
+    throw new ConflictError(`Ya existe un cliente registrado con el correo electrónico ${cliente.correo}.`);
+  }
 
-    // Paso 1: insertar el cliente (con nuevos campos opcionales)
-    const [clienteResult] = await connection.execute(
-      `INSERT INTO clientes (nombre, cedula, direccion, telefono, correo)
-       VALUES (?, ?, ?, ?, ?)`,
-      [
-        cliente.nombre,
-        cliente.cedula    || null,
-        cliente.direccion || null,
-        cliente.telefono,
-        cliente.correo
-      ]
-    );
-
-    const clienteId = clienteResult.insertId;
-
-    // Paso 2: insertar cada mascota con campos extendidos
+  return withTransaction(async (connection) => {
+    const clienteId = await clientesRepository.crearCliente(cliente, connection);
     const mascotasInsertadas = [];
-
     for (const mascota of mascotas) {
-      const [mascotaResult] = await connection.execute(
-        `INSERT INTO mascotas (cliente_id, nombre, especie, raza, sexo, fecha_nacimiento, peso_kg, color)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          clienteId,
-          mascota.nombre,
-          mascota.especie,
-          mascota.raza,
-          mascota.sexo             || 'Desconocido',
-          mascota.fechaNacimiento  || null,
-          mascota.pesoKg           || null,
-          mascota.color            || null
-        ]
-      );
-
       mascotasInsertadas.push({
-        id: mascotaResult.insertId,
+        id: await clientesRepository.crearMascota(clienteId, mascota, connection),
         clienteId,
         ...mascota
       });
     }
-
-    await connection.commit();
-
-    return {
-      cliente: { id: clienteId, ...cliente },
-      mascotas: mascotasInsertadas
-    };
-
-  } catch (err) {
-    await connection.rollback();
-    throw err;
-  } finally {
-    connection.release();
-  }
+    return { cliente: { id: clienteId, ...cliente }, mascotas: mascotasInsertadas };
+  });
 }
 
 export async function listarClientes() {
-  const [rows] = await pool.execute(
-    `SELECT c.id, c.nombre, c.cedula, c.direccion, c.telefono, c.correo, c.created_at,
-            m.id AS mascota_id, m.nombre AS mascota_nombre, m.especie, m.raza, m.sexo
-     FROM clientes c 
-     LEFT JOIN mascotas m ON m.cliente_id = c.id 
-     ORDER BY c.nombre`
-  );
+  const rows = await clientesRepository.listarConMascotas();
 
   const clientesMap = new Map();
 

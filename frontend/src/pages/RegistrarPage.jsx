@@ -10,8 +10,14 @@ import {
 /* Constantes iniciales */
 const MASCOTA_INIT = { nombre: "", especie: "Perro", raza: "", sexo: "Desconocido", fechaNacimiento: "", pesoKg: "", color: "" };
 const FORM_INIT    = { cliente: { nombre: "", cedula: "", direccion: "", telefono: "", correo: "" }, mascotas: [{ ...MASCOTA_INIT }] };
+const nombreRegex   = /^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s.'-]+$/;
+const cedulaRegex   = /^[a-zA-Z0-9-]+$/;
 const telefonoRegex = /^[0-9+\-\s]{7,15}$/;
 const correoRegex   = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const todayStr = (() => {
+  const t = new Date();
+  return new Date(t - t.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+})();
 
 const ESPECIES = [
   { value: "Perro",  icon: "🐕", label: "Perro"  },
@@ -41,26 +47,87 @@ function getPalette(i) { return PET_PALETTE[i % PET_PALETTE.length]; }
 /* Helpers de Validación */
 function validateCliente(cliente) {
   const e = {};
-  if (!cliente.nombre.trim() || cliente.nombre.trim().length < 3) {
-    e.nombre = "Ingresa el nombre completo (mínimo 3 caracteres).";
+  const nombre = (cliente.nombre || "").trim();
+  if (!nombre) {
+    e.nombre = "El nombre del cliente es obligatorio.";
+  } else if (nombre.length < 3) {
+    e.nombre = "El nombre debe tener al menos 3 caracteres.";
+  } else if (!nombreRegex.test(nombre)) {
+    e.nombre = "El nombre solo puede contener letras y espacios.";
   }
-  const tel = cliente.telefono.trim();
-  if (!tel || !telefonoRegex.test(tel)) {
-    e.telefono = "Ingresa un número telefónico válido (7 a 15 dígitos).";
+
+  const cedula = (cliente.cedula || "").trim();
+  if (!cedula) {
+    e.cedula = "El número de cédula es obligatorio.";
+  } else if (cedula.length < 5 || cedula.length > 20) {
+    e.cedula = "La cédula debe tener entre 5 y 20 caracteres.";
+  } else if (!cedulaRegex.test(cedula)) {
+    e.cedula = "La cédula solo puede contener números, letras o guiones.";
   }
-  const correo = cliente.correo.trim();
-  if (!correo || !correoRegex.test(correo)) {
+
+  const tel = (cliente.telefono || "").trim();
+  if (!tel) {
+    e.telefono = "El teléfono celular es obligatorio.";
+  } else if (!telefonoRegex.test(tel) || tel.replace(/\D/g, '').length < 7) {
+    e.telefono = "Ingresa un número telefónico válido (mínimo 7 dígitos).";
+  }
+
+  const correo = (cliente.correo || "").trim();
+  if (!correo) {
+    e.correo = "El correo electrónico es obligatorio.";
+  } else if (!correoRegex.test(correo)) {
     e.correo = "Ingresa una dirección de correo válida (ej. usuario@correo.com).";
   }
+
   return e;
 }
 
 function validateMascotas(mascotas) {
+  const hoy = new Date();
+  hoy.setHours(23, 59, 59, 999);
+  const minDate = new Date();
+  minDate.setFullYear(minDate.getFullYear() - 35);
+
   return mascotas.map(m => {
     const e = {};
-    if (!m.nombre.trim())  e.nombre  = "El nombre de la mascota es obligatorio.";
-    if (!m.especie.trim()) e.especie = "Selecciona una especie.";
-    if (!m.raza.trim())    e.raza    = "La raza es obligatoria.";
+    const nombre = (m.nombre || "").trim();
+    if (!nombre) {
+      e.nombre = "El nombre de la mascota es obligatorio.";
+    } else if (nombre.length < 2) {
+      e.nombre = "El nombre debe tener al menos 2 caracteres.";
+    }
+
+    if (!m.especie || !m.especie.trim()) {
+      e.especie = "Selecciona una especie.";
+    }
+
+    const raza = (m.raza || "").trim();
+    if (!raza) {
+      e.raza = "La raza es obligatoria.";
+    } else if (raza.length < 2) {
+      e.raza = "La raza debe tener al menos 2 caracteres.";
+    }
+
+    if (m.fechaNacimiento) {
+      const fecha = new Date(m.fechaNacimiento);
+      if (isNaN(fecha.getTime())) {
+        e.fechaNacimiento = "Fecha no válida.";
+      } else if (fecha > hoy) {
+        e.fechaNacimiento = "La fecha de nacimiento no puede ser en el futuro.";
+      } else if (fecha < minDate) {
+        e.fechaNacimiento = "La fecha no puede ser mayor a 35 años atrás.";
+      }
+    }
+
+    if (m.pesoKg !== "" && m.pesoKg !== null && m.pesoKg !== undefined) {
+      const peso = Number(m.pesoKg);
+      if (isNaN(peso) || peso <= 0) {
+        e.pesoKg = "El peso debe ser mayor a 0 kg.";
+      } else if (peso > 300) {
+        e.pesoKg = "El peso no puede superar 300 kg.";
+      }
+    }
+
     return e;
   });
 }
@@ -221,10 +288,12 @@ function PetCard({ mascota, index, onUpdate, onRemove, errors, canRemove }) {
             <input
               id={`m-nacimiento-${index}`}
               type="date"
+              max={todayStr}
               value={mascota.fechaNacimiento}
               onChange={e => onUpdate(index, "fechaNacimiento", e.target.value)}
-              className="input-field"
+              className={`input-field ${errors?.fechaNacimiento ? "border-rose-500 ring-1 ring-rose-500" : ""}`}
             />
+            <FieldError msg={errors?.fechaNacimiento} />
           </div>
 
           <div>
@@ -233,12 +302,14 @@ function PetCard({ mascota, index, onUpdate, onRemove, errors, canRemove }) {
               id={`m-peso-${index}`}
               type="number"
               step="0.1"
-              min="0"
+              min="0.1"
+              max="300"
               placeholder="Ej. 4.5"
               value={mascota.pesoKg}
               onChange={e => onUpdate(index, "pesoKg", e.target.value)}
-              className="input-field"
+              className={`input-field ${errors?.pesoKg ? "border-rose-500 ring-1 ring-rose-500" : ""}`}
             />
+            <FieldError msg={errors?.pesoKg} />
           </div>
 
           <div>
@@ -347,7 +418,10 @@ export default function RegistrarPage() {
     } catch (err) {
       const status = err.response?.status;
       const body   = err.response?.data;
-      if (status === 409) setApiError("El correo electrónico ya se encuentra registrado en la base de datos.");
+      if (status === 409) {
+        setApiError(body?.message || "Ya existe un cliente registrado con esta cédula o correo electrónico.");
+        setStep(1);
+      }
       else if (status === 400 && body?.errors) {
         const mapped = { cliente: {}, mascotas: form.mascotas.map(() => ({})) };
         body.errors.forEach(({ path, message }) => {
@@ -362,7 +436,8 @@ export default function RegistrarPage() {
         setStep(1);
       }
       else if (status === 403) setApiError("No tienes permisos suficientes para realizar esta acción.");
-      else setApiError("Error al procesar el registro. Por favor intente nuevamente.");
+      else setApiError(body?.message || "Error al procesar el registro. Por favor intente nuevamente.");
+      window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
       setLoading(false);
     }
@@ -453,15 +528,16 @@ export default function RegistrarPage() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <FieldLabel htmlFor="c-cedula">Número de cédula / documento</FieldLabel>
+                    <FieldLabel htmlFor="c-cedula" required>Número de cédula / documento</FieldLabel>
                     <input 
                       id="c-cedula"
                       type="text"
                       placeholder="Ej. 1098765432"
                       value={form.cliente.cedula}
                       onChange={e => setCliente("cedula", e.target.value)}
-                      className="input-field"
+                      className={`input-field ${errors.cliente?.cedula ? "border-rose-500 ring-1 ring-rose-500" : ""}`}
                     />
+                    <FieldError msg={errors.cliente?.cedula} />
                   </div>
 
                   <div>
@@ -556,9 +632,11 @@ export default function RegistrarPage() {
                     Datos del Propietario
                   </h3>
                   <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 divide-y divide-slate-100">
-                    <SummaryRow label="Nombre Completo" value={form.cliente.nombre} />
-                    <SummaryRow label="Teléfono"          value={form.cliente.telefono} />
+                    <SummaryRow label="Nombre Completo"    value={form.cliente.nombre} />
+                    <SummaryRow label="Cédula / Documento" value={form.cliente.cedula} />
+                    <SummaryRow label="Teléfono"           value={form.cliente.telefono} />
                     <SummaryRow label="Correo Electrónico" value={form.cliente.correo} />
+                    {form.cliente.direccion && <SummaryRow label="Dirección" value={form.cliente.direccion} />}
                   </div>
                 </div>
 

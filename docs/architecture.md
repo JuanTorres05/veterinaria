@@ -11,7 +11,7 @@ El sistema se construirá como una aplicación cliente-servidor desacoplada:
 
 2. **Backend (Node.js + Express)**
    - Expone rutas REST bajo `/api`.
-   - Aplica capas: Routes → Controllers → Services → Models.
+   - Aplica capas: Routes → Controllers → Services → Repositories → Database.
    - Usa middlewares para autenticación y autorización por rol.
 
 3. **Base de datos (MariaDB)**
@@ -30,6 +30,11 @@ El sistema se construirá como una aplicación cliente-servidor desacoplada:
 - JWT para login y sesiones stateless.
 - Bcrypt para hash de contraseñas.
 - Validaciones de payload (campos obligatorios/formato).
+- `routes`: define endpoint, autenticación y autorización.
+- `controllers`: traduce HTTP a entradas/salidas de la aplicación.
+- `services`: reglas de negocio, composición de operaciones y transacciones.
+- `repositories`: única capa con consultas SQL y dependencia de MySQL.
+- `db/transaction.js`: ejecuta operaciones atómicas solicitadas por servicios.
 
 ### Base de datos
 - Tablas iniciales:

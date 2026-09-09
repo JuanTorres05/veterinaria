@@ -1,126 +1,47 @@
 # DATAVET — Backend
 
-API REST para el sistema de gestión veterinaria DATAVET, construida con **Node.js + Express + MySQL**.
-
----
+API REST para la gestión veterinaria DATAVET, construida con Node.js, Express y MySQL.
 
 ## Requisitos
 
-- Node.js >= 20
-- MySQL 8+
-- npm >= 9
+- Node.js 20 o superior
+- MySQL 8 o superior
 
----
-
-## Instalación
+## Configuración
 
 ```bash
-# 1. Instalar dependencias
 npm install
-
-# 2. Copiar y configurar variables de entorno
 cp .env.example .env
-# Edita .env con tus datos de BD y un JWT_SECRET seguro
 ```
 
-### Generar un JWT_SECRET seguro
+Configura las credenciales de MySQL y aplica el esquema productivo:
 
 ```bash
-node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
-```
-
----
-
-## Base de datos
-
-```bash
-# 1. Aplicar el esquema
 mysql -u root -p datavet < ../database/schema.sql
-
-# 2. (Opcional) Cargar datos de prueba para tests de integración
-mysql -u root -p datavet < ../database/seed-test.sql
 ```
 
-Los usuarios semilla tienen contraseña `test1234`:
-| Cédula | Rol |
-|---|---|
-| 0000000001 | admin |
-| 0000000002 | veterinario |
-| 0000000003 | recepcionista |
+## Despliegue
 
----
+Configura `NODE_ENV=production`, un `JWT_SECRET` aleatorio de al menos 32 caracteres
+y `CORS_ORIGINS` con los dominios web autorizados separados por comas. Si se usa un
+proxy inverso, configura también `TRUST_PROXY=true`.
 
-## Ejecutar en desarrollo
+Inicia el servicio con:
 
 ```bash
-npm run dev
+npm start
 ```
 
-El servidor arranca en `http://localhost:3000`.
+La API incluye cabeceras de seguridad, CORS restringido, límite de tamaño de cuerpo,
+rate limiting y un encabezado `X-Request-Id` para rastrear errores.
 
----
+## Endpoints principales
 
-## Documentación interactiva (Swagger)
-
-Con el servidor corriendo, abre:
-
-```
-http://localhost:3000/api/docs
-```
-
----
-
-## Endpoints disponibles
-
-| Método | Ruta | Auth | Roles |
-|--------|------|------|-------|
-| `GET` | `/api/health` | No | — |
-| `POST` | `/api/auth/login` | No | — |
-| `POST` | `/api/clientes/registrar` | JWT | admin, recepcionista |
-| `GET` | `/api/mascotas/cliente/:clienteId` | JWT | todos |
-| `GET` | `/api/mascotas/:id` | JWT | todos |
-
----
-
-## Tests
-
-```bash
-npm test
-```
-
-Ejecuta todos los archivos `*.test.js` bajo `tests/` usando el test runner nativo de Node.js.
-
-**Cobertura de los tests:**
-- `tests/health.test.js` — Endpoint de salud
-- `tests/auth.test.js` — HU-01: Login (7 casos)
-- `tests/clientes.test.js` — HU-02: Registro cliente+mascota (6 casos)
-
-> Los tests de auth y clientes requieren BD en ejecución y el seed cargado.
-
----
-
-## Estructura del proyecto
-
-```
-backend/
-├── openapi.yaml             # Spec OpenAPI 3.0
-├── src/
-│   ├── app.js               # Express app + Swagger UI
-│   ├── server.js            # Arranque del servidor
-│   ├── config/env.js        # Variables de entorno validadas
-│   ├── db/pool.js           # Pool de conexiones MySQL
-│   ├── errors/
-│   │   └── http.errors.js   # HttpError, UnauthorizedError, ForbiddenError, NotFoundError
-│   ├── middlewares/
-│   │   ├── auth.middleware.js   # requireAuth + requireRole
-│   │   └── error.middleware.js  # Manejador global de errores
-│   ├── modules/
-│   │   ├── auth/            # HU-01: Login
-│   │   ├── clientes/        # HU-02: Registro cliente+mascota
-│   │   └── mascotas/        # Consulta de mascotas
-│   └── routes/index.js      # Router central
-└── tests/
-    ├── health.test.js
-    ├── auth.test.js
-    └── clientes.test.js
-```
+| Método | Ruta | Acceso |
+| --- | --- | --- |
+| GET | `/api/health` | Público |
+| POST | `/api/auth/login` | Público |
+| POST | `/api/clientes/registrar` | Admin o recepcionista |
+| GET | `/api/clientes` | Usuarios autenticados |
+| GET | `/api/mascotas/:id` | Usuarios autenticados |
+| GET/POST | `/api/citas` | Según rol |

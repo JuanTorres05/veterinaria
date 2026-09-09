@@ -112,8 +112,14 @@ export default function AgendaPage() {
   }
 
   const handleUpdateStatus = async (id, estado) => {
+    let notasCancelacion = null;
+    if (estado === "cancelada") {
+      const motivo = window.prompt("Ingresa el motivo de cancelación de la cita (Opcional):");
+      if (motivo === null) return;
+      notasCancelacion = motivo.trim() || "Cancelada por la clínica";
+    }
     try { 
-      await api.patch(`/citas/${id}/estado`, { estado }); 
+      await api.patch(`/citas/${id}/estado`, { estado, notas_cancelacion: notasCancelacion }); 
       loadCitas(); 
     } catch (err) { 
       alert(err.response?.data?.message || "Error al actualizar estado."); 
@@ -147,7 +153,29 @@ export default function AgendaPage() {
       return setFormError("Por favor completa todos los campos obligatorios marcados con (*).");
     }
 
+    if (motivoInput.trim().length < 3) {
+      errors.motivo = true;
+      setInvalidFields(errors);
+      return setFormError("El motivo de la consulta debe tener al menos 3 caracteres.");
+    }
+
     const fechaHoraConcat = `${fechaInput}T${horaInput}:00`;
+    const citaDate = new Date(fechaHoraConcat);
+    const ahora = new Date();
+
+    if (citaDate < new Date(ahora.getTime() - 5 * 60 * 1000)) {
+      errors.fecha = true;
+      errors.hora = true;
+      setInvalidFields(errors);
+      return setFormError("No es posible agendar citas en fechas u horas pasadas.");
+    }
+
+    const [horaH, horaM] = horaInput.split(":").map(Number);
+    if (horaH < 7 || (horaH === 20 && horaM > 0) || horaH > 20) {
+      errors.hora = true;
+      setInvalidFields(errors);
+      return setFormError("El horario de atención es de 07:00 AM a 08:00 PM.");
+    }
     const mascotaNombre   = selectedCliente?.mascotas?.find(m => String(m.id) === String(selectedMascotaId))?.nombre || "Mascota";
     const vetNombre       = veterinarios.find(v => String(v.id) === String(selectedUsuarioId))?.nombre || "Veterinario";
     const fechaDisplay    = `${formatDateDisplay(fechaInput)} a las ${horaInput}`;
@@ -631,6 +659,7 @@ export default function AgendaPage() {
                   </label>
                   <input 
                     type="date" 
+                    min={todayStr}
                     value={fechaInput} 
                     onChange={e => setFechaInput(e.target.value)} 
                     className={`w-full h-11 px-3.5 rounded-xl border bg-slate-900 text-white text-xs font-medium focus:outline-none focus:border-sky-500 cursor-pointer ${

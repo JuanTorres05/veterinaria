@@ -23,7 +23,11 @@ export async function crear(req, res, next) {
 
 export async function cambiarEstado(req, res, next) {
   try {
+    // SEGURIDAD I1: validar ID antes de llegar al servicio
     const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || id < 1) {
+      return res.status(400).json({ message: 'El ID de cita no es válido.' });
+    }
     const { estado, notas_cancelacion } = cambiarEstadoSchema.parse(req.body);
     const result = await citasService.cambiarEstadoCita(id, estado, notas_cancelacion || null);
     return res.json(result);
@@ -34,7 +38,11 @@ export async function cambiarEstado(req, res, next) {
 
 export async function eliminar(req, res, next) {
   try {
+    // SEGURIDAD I1: validar ID antes de llegar al servicio
     const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || id < 1) {
+      return res.status(400).json({ message: 'El ID de cita no es válido.' });
+    }
     await citasService.eliminarCita(id);
     return res.status(204).end();
   } catch (err) {

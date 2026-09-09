@@ -11,7 +11,8 @@ export async function resumen(req, res, next) {
 
 export async function citasPorDia(req, res, next) {
   try {
-    const dias = parseInt(req.query.dias, 10) || 30;
+    // SEGURIDAD C3: limitar el rango para evitar consultas SQL de millones de días
+    const dias = Math.min(Math.max(parseInt(req.query.dias, 10) || 30, 1), 365);
     const data = await reportesService.obtenerCitasPorDia(dias);
     return res.json(data);
   } catch (err) {

@@ -1,41 +1,18 @@
 # DATAVET
 
-Base inicial del proyecto para trabajar por **historias de usuario** con una arquitectura desacoplada:
+Sistema de gestión para clínicas veterinarias.
 
-- **Frontend**: React + Tailwind (pendiente de implementación)
-- **Backend**: Node.js + Express (implementación inicial lista)
-- **Base de datos**: MariaDB (puerto 3306)
-- **Autenticación**: JWT con control de roles (Admin, Veterinario, Recepcionista)
+## Componentes
 
-## Estado actual
+- `frontend/`: panel web construido con React.
+- `backend/`: API REST con Express, JWT y MySQL.
+- `database/schema.sql`: esquema productivo de la base de datos.
+- `docs/architecture.md`: arquitectura técnica del sistema.
 
-✅ Planificación base creada para trabajo por historias de usuario.
-✅ Backend inicial desarrollado para HU-01 y HU-02:
+## Ejecución del backend
 
-- `POST /api/auth/login` (valida credenciales y genera JWT)
-- `POST /api/clientes/registrar` (registro transaccional cliente + mascota)
-- Middleware JWT + autorización por roles
+Consulta la guía de configuración y despliegue en [backend/README.md](backend/README.md).
 
-## Estructura creada
+## Seguridad de despliegue
 
-```text
-/docs
-/database
-/backend
-  src/
-  tests/
-  package.json
-```
-
-## Ejecución rápida backend
-
-```bash
-cd backend
-cp .env.example .env
-npm install
-npm run dev
-```
-
-## Próximo paso recomendado
-
-Implementar frontend de HU-01 (pantalla login + rutas protegidas) y conectar con los endpoints ya disponibles en backend.
+No subas archivos `.env`, secretos, copias de bases de datos ni información de pacientes al repositorio.

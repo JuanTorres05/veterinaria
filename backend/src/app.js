@@ -1,24 +1,50 @@
 import express from 'express';
 import cors from 'cors';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
-import yaml from 'js-yaml';
-import swaggerUi from 'swagger-ui-express';
+import helmet from 'helmet';
+import { rateLimit } from 'express-rate-limit';
+import { randomUUID } from 'node:crypto';
 import routes from './routes/index.js';
 import { errorHandler } from './middlewares/error.middleware.js';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const openapiPath = join(__dirname, '..', 'openapi.yaml');
-const swaggerDocument = yaml.load(readFileSync(openapiPath, 'utf8'));
+import { env } from './config/env.js';
 
 const app = express();
 
-app.use(cors());
-app.use(express.json());
+app.disable('x-powered-by');
+if (env.trustProxy) app.set('trust proxy', 1);
 
-// Documentación interactiva en /api/docs
-app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+app.use((req, res, next) => {
+  req.requestId = randomUUID();
+  res.setHeader('X-Request-Id', req.requestId);
+  next();
+});
+app.use(helmet({ crossOriginResourcePolicy: false }));
+app.use(cors({
+  origin(origin, callback) {
+    // Las apps móviles y herramientas servidor-a-servidor no envían Origin.
+    if (!origin || env.allowedOrigins.includes(origin)) return callback(null, true);
+    const error = new Error('Origen no autorizado por CORS.');
+    error.statusCode = 403;
+    return callback(error);
+  },
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  maxAge: 86400
+}));
+app.use(express.json({ limit: env.http.jsonLimit }));
+app.use(rateLimit({
+  windowMs: env.http.rateLimitWindowMs,
+  limit: env.http.rateLimitMax,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: { message: 'Demasiadas solicitudes. Intenta de nuevo más tarde.' }
+}));
+app.use('/api/auth', rateLimit({
+  windowMs: env.http.rateLimitWindowMs,
+  limit: env.http.authRateLimitMax,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: { message: 'Demasiados intentos. Intenta de nuevo más tarde.' }
+}));
 
 app.use('/api', routes);
 app.use(errorHandler);

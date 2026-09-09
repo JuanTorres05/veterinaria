@@ -3,42 +3,29 @@
 
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import pool from '../../db/pool.js';
 import { env } from '../../config/env.js';
 import { UnauthorizedError, NotFoundError } from '../../errors/http.errors.js';
+import * as authRepository from './auth.repository.js';
 
 export async function login({ cedula, password }) {
-  console.log(`[authService.login] Intentando login para cédula: "${cedula}"`);
   // Buscamos al usuario uniendo con la tabla de roles para saber qué puede hacer
   // La condición activo = 1 evita que usuarios desactivados entren al sistema
-  const [rows] = await pool.execute(
-    `SELECT u.id, u.nombre, u.password_hash, r.nombre AS rol
-     FROM usuarios u
-     INNER JOIN roles r ON r.id = u.rol_id
-     WHERE u.cedula = ? AND u.activo = 1
-     LIMIT 1`,
-    [cedula]
-  );
+  const user = await authRepository.buscarUsuarioParaLogin(cedula);
 
   // Si no encontramos el usuario, lanzamos error genérico
   // (no decimos si fue la cédula o la contraseña por seguridad)
-  if (rows.length === 0) {
-    console.log(`[authService.login] Cédula no encontrada o usuario inactivo: "${cedula}"`);
+  if (!user) {
     throw new UnauthorizedError('Credenciales inválidas.');
   }
 
-  const user = rows[0];
-  console.log(`[authService.login] Cédula encontrada. Nombre: "${user.nombre}". Rol: "${user.rol}". Comparando contraseña...`);
 
   // Comparamos la contraseña que mandó el usuario con el hash guardado en BD
   const isValidPassword = await bcrypt.compare(password, user.password_hash);
 
   if (!isValidPassword) {
-    console.log(`[authService.login] Contraseña incorrecta para usuario: "${user.nombre}"`);
     throw new UnauthorizedError('Credenciales inválidas.');
   }
 
-  console.log(`[authService.login] Login exitoso para usuario: "${user.nombre}"`);
 
   // Todo bien, generamos el token con los datos que el frontend necesita saber
   // sub = subject (el id del usuario), rol lo usamos para mostrar/ocultar cosas
@@ -63,16 +50,7 @@ export async function login({ cedula, password }) {
   };
 }
 
-export async function listarVeterinarios() {
-  const [rows] = await pool.execute(
-    `SELECT u.id, u.nombre 
-     FROM usuarios u
-     INNER JOIN roles r ON r.id = u.rol_id
-     WHERE r.nombre IN ('veterinario', 'admin') AND u.activo = 1
-     ORDER BY u.nombre`
-  );
-  return rows;
-}
+export const listarVeterinarios = authRepository.listarVeterinariosActivos;
 
 /**
  * Recuperación de contraseña — HU-M01
@@ -80,32 +58,15 @@ export async function listarVeterinarios() {
  * En un sistema real enviaría un correo; aquí registra la solicitud y confirma.
  */
 export async function recuperarPassword({ cedula, correo }) {
-  console.log(`[authService.recuperarPassword] Solicitud para cédula: "${cedula}" correo: "${correo}"`);
+  // SEGURIDAD: buscamos el usuario pero NO revelamos si existe o no.
+  // Siempre devolvemos el mismo mensaje genérico para evitar enumeración de cédulas.
+  const user = await authRepository.buscarUsuarioActivoPorCedula(cedula);
 
-  // Verificamos que exista un usuario activo con esa cédula
-  const [rows] = await pool.execute(
-    `SELECT u.id, u.nombre
-     FROM usuarios u
-     WHERE u.cedula = ? AND u.activo = 1
-     LIMIT 1`,
-    [cedula]
-  );
-
-  if (rows.length === 0) {
-    throw new NotFoundError(
-      'No encontramos una cuenta activa con esa cédula. Verifica tus datos o contacta al administrador.'
-    );
-  }
-
-  const user = rows[0];
-  console.log(`[authService.recuperarPassword] Solicitud registrada para usuario: "${user.nombre}"`);
-
-  // En producción aquí se enviaría un correo con link de reset.
-  // Para esta versión, confirmamos la solicitud con el correo indicado.
+  // En producción aquí se enviaría un correo con link de reset SI el usuario existe.
+  // Para esta versión respondemos siempre con 200 y el mismo mensaje.
+  const nombre = user?.nombre ?? 'Administrador';
   return {
-    message: `Solicitud de recuperación registrada. El administrador contactará a ${correo} con las instrucciones para restablecer tu contraseña.`,
-    usuario: user.nombre
+    message: `Si existe una cuenta activa con esa cédula, el administrador contactará a ${correo} con las instrucciones para restablecer la contraseña.`,
+    usuario: nombre
   };
 }
-
-

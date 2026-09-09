@@ -89,9 +89,15 @@ export default function FichaMascotaPage() {
 
   const handleSubmitHistorial = async (e) => {
     e.preventDefault();
-    if (!motivoInput.trim()) return setFormError('El motivo de consulta es obligatorio.');
-    if (!diagnosticoInput.trim()) return setFormError('El diagnóstico médico es obligatorio.');
-    if (!tratamientoInput.trim()) return setFormError('El tratamiento asignado es obligatorio.');
+    if (!motivoInput.trim() || motivoInput.trim().length < 3) {
+      return setFormError('El motivo de consulta debe tener al menos 3 caracteres.');
+    }
+    if (!diagnosticoInput.trim() || diagnosticoInput.trim().length < 3) {
+      return setFormError('El diagnóstico médico debe tener al menos 3 caracteres.');
+    }
+    if (!tratamientoInput.trim() || tratamientoInput.trim().length < 3) {
+      return setFormError('El tratamiento asignado debe tener al menos 3 caracteres.');
+    }
 
     try {
       setGuardando(true);
