@@ -5,7 +5,7 @@
 // en un solo lugar si nuestra red Wi-Fi cambia.
 
 // IP activa de tu máquina en la red local detectada por Expo
-export const API_BASE_URL = 'http://10.48.73.97:3000/api';
+export const API_BASE_URL = 'http://192.168.2.13:3000/api';
 
 // Mapeo de rutas de nuestro Backend Express
 export const ENDPOINTS = {

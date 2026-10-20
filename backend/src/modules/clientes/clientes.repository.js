@@ -2,44 +2,98 @@ import pool from '../../db/pool.js';
 
 export async function buscarPorCedula(cedula, executor = pool) {
   const [rows] = await executor.execute(
-    'SELECT id, nombre, cedula, correo FROM clientes WHERE cedula = ? LIMIT 1',
+    'SELECT id_cliente AS id, nombre, apellido, cedula, email AS correo FROM clientes WHERE cedula = ? AND activo = 1 LIMIT 1',
     [cedula]
   );
   return rows[0] || null;
 }
 
-export async function buscarPorCorreo(correo, executor = pool) {
+export async function buscarPorCorreo(email, executor = pool) {
   const [rows] = await executor.execute(
-    'SELECT id, nombre, cedula, correo FROM clientes WHERE correo = ? LIMIT 1',
-    [correo]
+    'SELECT id_cliente AS id, nombre, apellido, cedula, email AS correo FROM clientes WHERE email = ? AND activo = 1 LIMIT 1',
+    [email]
   );
   return rows[0] || null;
 }
 
 export async function crearCliente(cliente, executor = pool) {
+  // Manejo de nombre y apellido: si viene solo 'nombre', separar el primer término del resto
+  let nombre = cliente.nombre.trim();
+  let apellido = (cliente.apellido || '').trim();
+  if (!apellido && nombre.includes(' ')) {
+    const parts = nombre.split(/\s+/);
+    nombre = parts[0];
+    apellido = parts.slice(1).join(' ');
+  } else if (!apellido) {
+    apellido = '.'; // campo NOT NULL en la BD
+  }
+
   const [result] = await executor.execute(
-    `INSERT INTO clientes (nombre, cedula, direccion, telefono, correo)
-     VALUES (?, ?, ?, ?, ?)`,
-    [cliente.nombre, cliente.cedula, cliente.direccion || null, cliente.telefono, cliente.correo]
+    `INSERT INTO clientes (nombre, apellido, cedula, direccion, telefono, email)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [
+      nombre,
+      apellido,
+      cliente.cedula,
+      cliente.direccion || null,
+      cliente.telefono  || null,
+      cliente.correo    || cliente.email || null,
+    ]
   );
   return result.insertId;
 }
 
 export async function crearMascota(clienteId, mascota, executor = pool) {
   const [result] = await executor.execute(
-    `INSERT INTO mascotas (cliente_id, nombre, especie, raza, sexo, fecha_nacimiento, peso_kg, color)
+    `INSERT INTO mascotas (id_cliente, nombre, especie, raza, sexo, fecha_nacimiento, peso, color)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [clienteId, mascota.nombre, mascota.especie, mascota.raza, mascota.sexo || 'Desconocido',
-      mascota.fechaNacimiento || null, mascota.pesoKg || null, mascota.color || null]
+    [
+      clienteId,
+      mascota.nombre,
+      mascota.especie,
+      mascota.raza             || null,
+      mascota.sexo             || 'Desconocido',
+      mascota.fechaNacimiento  || null,
+      mascota.pesoKg           || null,
+      mascota.color            || null,
+    ]
   );
-  return result.insertId;
+  const mascotaId = result.insertId;
+
+  // Aperturar historia clínica automáticamente para la nueva mascota
+  try {
+    await executor.execute(
+      `INSERT INTO historias_clinicas (id_mascota, fecha_apertura, estado, observaciones_generales)
+       VALUES (?, CURDATE(), 'Activa', CONCAT('Historia clínica inicial de ', ?))`,
+      [mascotaId, mascota.nombre]
+    );
+  } catch (err) {
+    // Si ya existe por algún trigger, continuamos
+    console.warn('Historia clínica advertencia:', err.message);
+  }
+
+  return mascotaId;
 }
 
 export async function listarConMascotas() {
   const [rows] = await pool.execute(
-    `SELECT c.id, c.nombre, c.cedula, c.direccion, c.telefono, c.correo, c.created_at,
-            m.id AS mascota_id, m.nombre AS mascota_nombre, m.especie, m.raza, m.sexo
-     FROM clientes c LEFT JOIN mascotas m ON m.cliente_id = c.id ORDER BY c.nombre`
+    `SELECT
+       c.id_cliente AS id,
+       TRIM(CONCAT(c.nombre, ' ', IFNULL(c.apellido, ''))) AS nombre,
+       c.cedula,
+       c.direccion,
+       c.telefono,
+       c.email AS correo,
+       c.fecha_registro AS created_at,
+       m.id_mascota     AS mascota_id,
+       m.nombre         AS mascota_nombre,
+       m.especie,
+       m.raza,
+       m.sexo
+     FROM clientes c
+     LEFT JOIN mascotas m ON m.id_cliente = c.id_cliente AND m.activo = 1
+     WHERE c.activo = 1
+     ORDER BY c.nombre ASC`
   );
   return rows;
 }

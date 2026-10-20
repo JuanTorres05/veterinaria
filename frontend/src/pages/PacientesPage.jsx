@@ -38,15 +38,7 @@ export default function PacientesPage() {
       setLoading(true); 
       setError("");
       const res = await api.get("/clientes");
-      
-      // Filtrar limpiamente cualquier dato residual con etiquetas de prueba
-      const clientesLimpios = (res.data || []).filter(c => 
-        !c.nombre.toLowerCase().includes("prueba") &&
-        !c.correo.toLowerCase().includes("test_") &&
-        !c.correo.toLowerCase().includes("example.com")
-      );
-      
-      setClientes(clientesLimpios);
+      setClientes(res.data || []);
     } catch (err) {
       setError(err.response?.data?.message || "Error al obtener el listado de pacientes.");
     } finally {
@@ -59,13 +51,18 @@ export default function PacientesPage() {
   // Reiniciar a página 1 al buscar
   useEffect(() => { setCurrentPage(1); }, [searchQuery]);
 
-  const filteredClientes = clientes.filter(c =>
-    c.nombre.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (c.cedula && c.cedula.toLowerCase().includes(searchQuery.toLowerCase())) ||
-    c.telefono.includes(searchQuery) ||
-    c.correo.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    c.mascotas.some(m => m.nombre.toLowerCase().includes(searchQuery.toLowerCase()) || m.especie.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  const filteredClientes = clientes.filter(c => {
+    const q = searchQuery.toLowerCase();
+    const nombre = (c.nombre || "").toLowerCase();
+    const cedula = String(c.cedula || "").toLowerCase();
+    const telefono = String(c.telefono || "").toLowerCase();
+    const correo = (c.correo || "").toLowerCase();
+    const mascotasMatch = (c.mascotas || []).some(m => 
+      (m.nombre || "").toLowerCase().includes(q) || 
+      (m.especie || "").toLowerCase().includes(q)
+    );
+    return nombre.includes(q) || cedula.includes(q) || telefono.includes(q) || correo.includes(q) || mascotasMatch;
+  });
 
   // Cálculo de Paginación
   const totalPages = Math.ceil(filteredClientes.length / ITEMS_PER_PAGE) || 1;

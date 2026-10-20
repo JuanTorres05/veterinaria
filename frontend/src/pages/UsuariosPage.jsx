@@ -31,7 +31,7 @@ export default function UsuariosPage() {
   const [cedulaInput,   setCedulaInput]   = useState("");
   const [nombreInput,   setNombreInput]   = useState("");
   const [passwordInput, setPasswordInput] = useState("");
-  const [rolIdInput,    setRolIdInput]    = useState("2"); // Por defecto Veterinario
+  const [rolIdInput,    setRolIdInput]    = useState("3"); // Por defecto Veterinario (id 3 en BD)
   const [formError,     setFormError]     = useState("");
   const [guardando,     setGuardando]     = useState(false);
 
@@ -147,8 +147,8 @@ export default function UsuariosPage() {
 
   const filteredUsuarios = usuarios.filter((u) => {
     const matchesSearch = 
-      u.nombre.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      u.cedula.toLowerCase().includes(searchQuery.toLowerCase());
+      (u.nombre || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+      String(u.cedula || "").toLowerCase().includes(searchQuery.toLowerCase());
     const matchesRol = rolFiltro === "" || u.rol === rolFiltro;
     return matchesSearch && matchesRol;
   });
@@ -408,8 +408,8 @@ export default function UsuariosPage() {
                   value={rolIdInput}
                   onChange={(e) => setRolIdInput(e.target.value)}
                   className="w-full h-11 px-3.5 rounded-xl border border-slate-700 bg-slate-900 text-white text-xs font-medium focus:outline-none focus:border-sky-500">
-                  <option value="2">🩺 Veterinario (Atención Clínica y Diagnóstico)</option>
-                  <option value="3">📋 Recepción (Agenda, Registros y Citas)</option>
+                  <option value="3">🩺 Veterinario (Atención Clínica y Diagnóstico)</option>
+                  <option value="2">📋 Recepción (Agenda, Registros y Citas)</option>
                   <option value="1">🛡️ Administrador (Acceso Total y Métricas)</option>
                 </select>
               </div>

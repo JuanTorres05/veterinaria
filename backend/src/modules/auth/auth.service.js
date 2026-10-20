@@ -7,6 +7,13 @@ import { env } from '../../config/env.js';
 import { UnauthorizedError, NotFoundError } from '../../errors/http.errors.js';
 import * as authRepository from './auth.repository.js';
 
+// Mapeo de nombres de rol en BD → clave que usa el frontend
+const ROL_MAP = {
+  'Administrador': 'admin',
+  'Recepcionista':  'recepcionista',
+  'Veterinario':    'veterinario',
+};
+
 export async function login({ cedula, password }) {
   // Buscamos al usuario uniendo con la tabla de roles para saber qué puede hacer
   // La condición activo = 1 evita que usuarios desactivados entren al sistema
@@ -29,11 +36,13 @@ export async function login({ cedula, password }) {
 
   // Todo bien, generamos el token con los datos que el frontend necesita saber
   // sub = subject (el id del usuario), rol lo usamos para mostrar/ocultar cosas
+  const rolNormalizado = ROL_MAP[user.rol] ?? user.rol.toLowerCase();
+
   const token = jwt.sign(
     {
       sub: user.id,
       nombre: user.nombre,
-      rol: user.rol
+      rol: rolNormalizado
     },
     env.jwt.secret,
     { expiresIn: env.jwt.expiresIn } // por defecto 8 horas
@@ -45,7 +54,7 @@ export async function login({ cedula, password }) {
     user: {
       id: user.id,
       nombre: user.nombre,
-      rol: user.rol
+      rol: rolNormalizado
     }
   };
 }
@@ -70,3 +79,45 @@ export async function recuperarPassword({ cedula, correo }) {
     usuario: nombre
   };
 }
+
+/**
+ * Paso 1 — Verificar cédula
+ * Confirma que la cédula pertenece a un usuario activo y devuelve su nombre.
+ * El frontend usa esta respuesta para mostrar el formulario de nueva contraseña.
+ */
+export async function verificarCedula({ cedula }) {
+  const user = await authRepository.buscarUsuarioActivoPorCedula(cedula);
+  if (!user) {
+    throw new NotFoundError('No se encontró un usuario activo con esa cédula.');
+  }
+  return {
+    encontrado: true,
+    nombre: user.nombre,
+    mensaje: `Hola ${user.nombre}, ingresa tu nueva contraseña.`
+  };
+}
+
+/**
+ * Paso 2 — Cambiar contraseña
+ * Recibe cédula + nueva contraseña (ya validado que coinciden en el schema).
+ * Hashea con bcrypt y actualiza en la BD.
+ */
+export async function cambiarPassword({ cedula, nuevaPassword }) {
+  // Verificamos que el usuario exista antes de hashear
+  const user = await authRepository.buscarUsuarioActivoPorCedula(cedula);
+  if (!user) {
+    throw new NotFoundError('No se encontró un usuario activo con esa cédula.');
+  }
+
+  const nuevoHash = await bcrypt.hash(nuevaPassword, 12);
+  const filasAfectadas = await authRepository.actualizarPasswordPorCedula(cedula, nuevoHash);
+
+  if (filasAfectadas === 0) {
+    throw new NotFoundError('No se pudo actualizar la contraseña. Verifique la cédula.');
+  }
+
+  return {
+    mensaje: `La contraseña de ${user.nombre} fue actualizada correctamente.`
+  };
+}
+
