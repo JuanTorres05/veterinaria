@@ -57,7 +57,7 @@ export const env = {
     expiresIn: process.env.JWT_EXPIRES_IN || '8h'
   },
   http: {
-    jsonLimit: process.env.JSON_BODY_LIMIT || '100kb',
+    jsonLimit: process.env.JSON_BODY_LIMIT || '25mb',
     rateLimitWindowMs: Number(process.env.RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000),
     rateLimitMax: Number(process.env.RATE_LIMIT_MAX || 100),
     authRateLimitMax: Number(process.env.AUTH_RATE_LIMIT_MAX || 20)

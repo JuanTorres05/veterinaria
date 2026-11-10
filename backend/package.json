@@ -9,8 +9,7 @@
     "start": "node src/server.js",
     "setup": "node scripts/setup.js",
     "seed": "node scripts/seed.js",
-    "db:create": "node scripts/create-db.js",
-    "db:migrate": "node scripts/migrate-enrich-db.js"
+    "db:create": "node scripts/create-db.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

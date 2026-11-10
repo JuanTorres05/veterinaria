@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
+import Spinner from '../components/Spinner';
+import { formatBytes, leerArchivosParaSubida } from '../utils/archivos';
 import {
   Monitor,
   Clock,
@@ -14,9 +17,13 @@ import {
   Stethoscope,
   User,
   Warning,
-  Circle,
-  Phone,
-  CalendarBlank
+  CalendarBlank,
+  ClipboardText,
+  Scales,
+  X,
+  ArrowSquareOut,
+  UploadSimple,
+  FilePdf
 } from '@phosphor-icons/react';
 
 /* ── Helpers ───────────────────────────────────────────────────────────── */
@@ -78,12 +85,13 @@ function LiveIndicator({ onRefresh, isRefreshing }) {
 }
 
 /* ── CitaCard Con Botón Cancelar Discreto (Baja Prominencia) ────────────── */
-function CitaCard({ cita, onCambiarEstado, loadingId, userRol }) {
+function CitaCard({ cita, onCambiarEstado, onAtenderCita, loadingId, userRol }) {
   const isPendiente = cita.estado === 'pendiente';
   const isAtendida  = cita.estado === 'atendida';
   const isCancelada = cita.estado === 'cancelada';
   const isLoading   = loadingId === cita.id;
 
+  const esVetOAdmin   = ['admin', 'veterinario'].includes(userRol);
   const puedeAtender  = ['admin', 'veterinario', 'recepcionista'].includes(userRol);
   const puedeCancelar = ['admin', 'recepcionista'].includes(userRol);
 
@@ -157,7 +165,15 @@ function CitaCard({ cita, onCambiarEstado, loadingId, userRol }) {
       {/* Acciones para Citas Pendientes — Cancelar tiene baja prominencia visual */}
       {isPendiente && (
         <div className="flex items-center justify-between gap-2 mt-4 pt-3 border-t border-slate-100">
-          {puedeAtender && (
+          {esVetOAdmin ? (
+            <button
+              onClick={() => onAtenderCita(cita)}
+              disabled={isLoading}
+              className="flex-1 inline-flex items-center justify-center gap-2 h-9 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold shadow-xs transition-all active:scale-95">
+              <Stethoscope size={16} weight="bold" />
+              <span>Atender Cita</span>
+            </button>
+          ) : puedeAtender ? (
             <button
               onClick={() => onCambiarEstado(cita.id, 'atendida')}
               disabled={isLoading}
@@ -165,7 +181,7 @@ function CitaCard({ cita, onCambiarEstado, loadingId, userRol }) {
               <CheckCircle size={15} weight="bold" />
               <span>{isLoading ? 'Guardando...' : 'Marcar Atendida'}</span>
             </button>
-          )}
+          ) : null}
 
           {/* Botón Cancelar sutil / discreto de baja prominencia para evitar clics accidentales */}
           {puedeCancelar && (
@@ -185,15 +201,25 @@ function CitaCard({ cita, onCambiarEstado, loadingId, userRol }) {
       {!isPendiente && (
         <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between">
           <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Estado actual</span>
-          {isAtendida ? (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">
-              <CheckCircle size={13} weight="fill" /> Atendida
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold bg-rose-100 text-rose-800 border border-rose-200">
-              <XCircle size={13} weight="fill" /> Cancelada
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {isAtendida && (
+              <Link
+                to={`/mascotas/${cita.mascota_id}`}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100 text-[11px] font-bold transition-all">
+                <ClipboardText size={13} weight="bold" />
+                <span>Ver Historia</span>
+              </Link>
+            )}
+            {isAtendida ? (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                <CheckCircle size={13} weight="fill" /> Atendida
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold bg-rose-100 text-rose-800 border border-rose-200">
+                <XCircle size={13} weight="fill" /> Cancelada
+              </span>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -209,6 +235,19 @@ export default function MonitoreoPage() {
   const [error, setError] = useState('');
   const [loadingId, setLoadingId] = useState(null);
   const [ultimaActualizacion, setUltimaActualizacion] = useState(null);
+
+  // Estados para Modal de Atención Médica ("Atender Cita")
+  const [citaAtender, setCitaAtender] = useState(null);
+  const [sintomasInput, setSintomasInput] = useState('');
+  const [pesoInput, setPesoInput] = useState('');
+  const [diagnosticoInput, setDiagnosticoInput] = useState('');
+  const [tratamientoInput, setTratamientoInput] = useState('');
+  const [notasInput, setNotasInput] = useState('');
+  const [archivosInput, setArchivosInput] = useState([]);
+  const [atencionError, setAtencionError] = useState('');
+  const [guardandoAtencion, setGuardandoAtencion] = useState(false);
+  const [atencionExito, setAtencionExito] = useState(null);
+  const atenderFileRef = useRef(null);
 
   const hoyStr = (() => {
     const t = new Date();
@@ -249,6 +288,72 @@ export default function MonitoreoPage() {
       alert('No se pudo actualizar el estado de la cita.');
     } finally {
       setLoadingId(null);
+    }
+  }
+
+  function openAtenderModal(cita) {
+    setCitaAtender(cita);
+    setSintomasInput(cita.motivo || '');
+    setPesoInput('');
+    setDiagnosticoInput('');
+    setTratamientoInput('');
+    setNotasInput('');
+    setArchivosInput([]);
+    setAtencionError('');
+  }
+
+  async function handleSelectArchivosAtender(e) {
+    try {
+      const nuevos = await leerArchivosParaSubida(e.target.files);
+      setArchivosInput((prev) => [...prev, ...nuevos].slice(0, 10));
+      setAtencionError('');
+    } catch (err) {
+      setAtencionError(err.message);
+    } finally {
+      e.target.value = '';
+    }
+  }
+
+  async function handleAtenderSubmit(e) {
+    e.preventDefault();
+    if (!citaAtender) return;
+
+    if (!sintomasInput.trim() || sintomasInput.trim().length < 3) {
+      return setAtencionError('Los síntomas o motivo de consulta deben tener al menos 3 caracteres.');
+    }
+    if (!diagnosticoInput.trim() || diagnosticoInput.trim().length < 3) {
+      return setAtencionError('El diagnóstico médico es obligatorio (mínimo 3 caracteres).');
+    }
+    if (!tratamientoInput.trim() || tratamientoInput.trim().length < 3) {
+      return setAtencionError('El tratamiento o prescripción es obligatorio (mínimo 3 caracteres).');
+    }
+
+    const tzOffset = new Date().getTimezoneOffset() * 60000;
+    const localISOTime = new Date(Date.now() - tzOffset).toISOString().slice(0, 19);
+
+    try {
+      setGuardandoAtencion(true);
+      setAtencionError('');
+      await api.post(`/mascotas/${citaAtender.mascota_id}/historial`, {
+        cita_id: citaAtender.id,
+        fecha: localISOTime,
+        motivo: sintomasInput.trim(),
+        diagnostico: diagnosticoInput.trim(),
+        tratamiento: tratamientoInput.trim(),
+        notas: notasInput.trim() || null,
+        peso_kg: pesoInput !== '' ? Number(pesoInput) : null,
+        archivos: archivosInput,
+      });
+
+      const mascotaNombre = citaAtender.mascota_nombre;
+      const mascotaId = citaAtender.mascota_id;
+      setCitaAtender(null);
+      await loadCitas(true);
+      setAtencionExito({ mascota: mascotaNombre, mascotaId });
+    } catch (err) {
+      setAtencionError(err.response?.data?.message || 'Error al registrar la consulta clínica.');
+    } finally {
+      setGuardandoAtencion(false);
     }
   }
 
@@ -329,6 +434,36 @@ export default function MonitoreoPage() {
         </div>
       )}
 
+      {/* ── Banner de Éxito al Registrar Atención Médica ── */}
+      {atencionExito && (
+        <div className="animate-fade-in flex items-start gap-4 px-5 py-4 rounded-2xl border border-emerald-200 bg-emerald-50 text-emerald-900 shadow-md">
+          <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center flex-shrink-0 shadow-xs">
+            <CheckCircle size={22} weight="fill" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-base leading-tight">
+              ¡Consulta Médica Registrada y Cita Atendida!
+            </p>
+            <p className="text-sm mt-1 leading-relaxed text-emerald-800">
+              Se guardó la evolución clínica de <strong>{atencionExito.mascota}</strong> en su historia clínica.{' '}
+              {atencionExito.mascotaId && (
+                <Link
+                  to={`/mascotas/${atencionExito.mascotaId}`}
+                  className="inline-flex items-center gap-1 font-extrabold text-emerald-900 underline hover:text-emerald-700 ml-1">
+                  <span>Ver expediente clínico</span>
+                  <ArrowSquareOut size={14} weight="bold" />
+                </Link>
+              )}
+            </p>
+          </div>
+          <button
+            onClick={() => setAtencionExito(null)}
+            className="p-1.5 rounded-lg text-emerald-700 hover:bg-emerald-100 transition-all">
+            <X size={16} weight="bold" />
+          </button>
+        </div>
+      )}
+
       {/* ── Seccion: Pacientes en Espera ── */}
       <div>
         <div className="flex items-center gap-2.5 mb-3.5">
@@ -371,6 +506,7 @@ export default function MonitoreoPage() {
                 key={cita.id}
                 cita={cita}
                 onCambiarEstado={handleCambiarEstado}
+                onAtenderCita={openAtenderModal}
                 loadingId={loadingId}
                 userRol={user?.rol}
               />
@@ -443,6 +579,241 @@ export default function MonitoreoPage() {
             </a>{' '}
             para agendar una consulta.
           </p>
+        </div>
+      )}
+
+      {/* ── MODAL "ATENDER CITA MÉDICA" — Formulario de Registro Clínico ── */}
+      {citaAtender && (
+        <div className="fixed inset-0 bg-slate-950/75 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="w-full max-w-2xl rounded-2xl border border-slate-800 bg-[#0F172A] text-slate-100 shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
+
+            {/* Cabecera del Modal */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/90 flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold shadow-sm">
+                  <Stethoscope size={20} weight="bold" />
+                </div>
+                <div>
+                  <h2 className="font-extrabold text-base text-white tracking-tight">
+                    Atención Médica y Registro Clínico
+                  </h2>
+                  <p className="text-xs text-slate-400">
+                    Cita #{citaAtender.id} • {formatHora(citaAtender.fecha_hora)} • Dr(a). {citaAtender.veterinario_nombre}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => !guardandoAtencion && setCitaAtender(null)}
+                className="w-8 h-8 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 flex items-center justify-center transition-all">
+                <X size={18} weight="bold" />
+              </button>
+            </div>
+
+            {/* Cuerpo del Formulario Clínico */}
+            <form onSubmit={handleAtenderSubmit} className="p-6 space-y-4 overflow-y-auto">
+
+              {/* Resumen del Paciente y Propietario */}
+              <div className="flex items-center justify-between flex-wrap gap-3 p-3.5 rounded-xl border border-slate-800 bg-slate-900/70">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center">
+                    {renderSpeciesIcon(citaAtender.especie)}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-extrabold text-sm text-white">{citaAtender.mascota_nombre}</span>
+                      <span className="px-2 py-0.5 rounded-md bg-sky-500/20 border border-sky-500/30 text-sky-300 text-[10px] font-bold uppercase">
+                        {citaAtender.especie}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Propietario: <strong className="text-slate-200">{citaAtender.cliente_nombre}</strong>
+                      {citaAtender.telefono ? ` • Tel: ${citaAtender.telefono}` : ''}
+                    </p>
+                  </div>
+                </div>
+
+                <Link
+                  to={`/mascotas/${citaAtender.mascota_id}`}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 text-sky-300 text-xs font-bold transition-all">
+                  <ClipboardText size={15} weight="bold" />
+                  <span>Ver Expediente Completo</span>
+                </Link>
+              </div>
+
+              {/* Alerta de Error */}
+              {atencionError && (
+                <div className="flex items-center gap-2.5 p-3.5 rounded-xl border border-rose-500/30 bg-rose-950/40 text-rose-300 text-xs font-semibold">
+                  <Warning size={18} weight="bold" className="flex-shrink-0 text-rose-400" />
+                  <span>{atencionError}</span>
+                </div>
+              )}
+
+              {/* Fila 1: Síntomas / Motivo y Peso Actual */}
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                <div className="sm:col-span-8">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
+                    Síntomas / Motivo de Consulta <span className="text-rose-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={sintomasInput}
+                    onChange={(e) => setSintomasInput(e.target.value)}
+                    placeholder="Síntomas presentados o motivo de la atención..."
+                    className="w-full h-11 px-3.5 rounded-xl border border-slate-700 bg-slate-900 text-white placeholder-slate-500 text-xs font-medium focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <div className="sm:col-span-4">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
+                    Peso en Consulta (kg)
+                  </label>
+                  <div className="relative">
+                    <Scales size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0.1"
+                      max="500"
+                      value={pesoInput}
+                      onChange={(e) => setPesoInput(e.target.value)}
+                      placeholder="Ej. 12.5"
+                      className="w-full h-11 pl-9 pr-3.5 rounded-xl border border-slate-700 bg-slate-900 text-white placeholder-slate-500 text-xs font-medium focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Fila 2: Diagnóstico Médico (*) */}
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
+                  Diagnóstico Médico <span className="text-rose-400">*</span>
+                </label>
+                <textarea
+                  rows="2"
+                  value={diagnosticoInput}
+                  onChange={(e) => setDiagnosticoInput(e.target.value)}
+                  placeholder="Describa el diagnóstico clínico o hallazgos del examen físico..."
+                  className="w-full p-3.5 rounded-xl border border-slate-700 bg-slate-900 text-white placeholder-slate-500 text-xs font-medium focus:outline-none focus:border-emerald-500 resize-none"
+                />
+              </div>
+
+              {/* Fila 3: Tratamiento y Prescripción (*) */}
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
+                  Tratamiento y Medicación Aplicada / Recetada <span className="text-rose-400">*</span>
+                </label>
+                <textarea
+                  rows="3"
+                  value={tratamientoInput}
+                  onChange={(e) => setTratamientoInput(e.target.value)}
+                  placeholder="Indique los medicamentos, dosis, frecuencia, procedimientos realizados o plan terapéutico..."
+                  className="w-full p-3.5 rounded-xl border border-slate-700 bg-slate-900 text-white placeholder-slate-500 text-xs font-medium focus:outline-none focus:border-emerald-500 resize-none"
+                />
+              </div>
+
+              {/* Fila 4: Observaciones y Recomendaciones (Opcional) */}
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
+                  Observaciones Clínicas / Recomendaciones al Propietario
+                </label>
+                <textarea
+                  rows="2"
+                  value={notasInput}
+                  onChange={(e) => setNotasInput(e.target.value)}
+                  placeholder="Signos vitales adicionales, cuidados en casa, próximo control sugerido (opcional)..."
+                  className="w-full p-3.5 rounded-xl border border-slate-700 bg-slate-900 text-white placeholder-slate-500 text-xs font-medium focus:outline-none focus:border-emerald-500 resize-none"
+                />
+              </div>
+
+              {/* Fila 5: Adjuntar Fotos o PDFs al Historial Clínico */}
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
+                  Adjuntar Fotos o PDFs al Historial Clínico (Opcional)
+                </label>
+                <div
+                  onClick={() => atenderFileRef.current?.click()}
+                  className="border-2 border-dashed border-slate-700 hover:border-sky-500 rounded-xl p-3.5 bg-slate-900/60 text-center cursor-pointer transition-colors">
+                  <div className="flex items-center justify-center gap-2 text-sky-400 font-bold text-xs">
+                    <UploadSimple size={17} weight="bold" />
+                    <span>Seleccionar fotos (JPG, PNG, WEBP) o documentos PDF</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Exámenes de laboratorio, radiografías, ecografías o fotografías clínicas
+                  </p>
+                  <input
+                    ref={atenderFileRef}
+                    type="file"
+                    multiple
+                    accept="image/jpeg,image/png,image/webp,image/gif,application/pdf"
+                    onChange={handleSelectArchivosAtender}
+                    className="hidden"
+                  />
+                </div>
+
+                {archivosInput.length > 0 && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2.5">
+                    {archivosInput.map((arch, idx) => (
+                      <div
+                        key={`${arch.nombre_archivo}-${idx}`}
+                        className="flex items-center justify-between gap-2 p-2 rounded-xl border border-slate-700 bg-slate-900">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          {arch.esImagen ? (
+                            <img
+                              src={arch.base64_data}
+                              alt={arch.nombre_archivo}
+                              className="w-9 h-9 rounded-lg object-cover border border-slate-700 flex-shrink-0"
+                            />
+                          ) : (
+                            <div className="w-9 h-9 rounded-lg bg-rose-500/20 border border-rose-500/30 text-rose-400 flex items-center justify-center flex-shrink-0">
+                              <FilePdf size={18} weight="fill" />
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-white truncate">{arch.nombre_archivo}</p>
+                            <p className="text-[10px] text-slate-400">{formatBytes(arch.tamano_bytes)}</p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setArchivosInput((prev) => prev.filter((_, i) => i !== idx))}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800">
+                          <X size={14} weight="bold" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Botones de Acción */}
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => !guardandoAtencion && setCitaAtender(null)}
+                  disabled={guardandoAtencion}
+                  className="px-4 py-2.5 h-11 rounded-xl font-bold text-xs text-slate-300 hover:text-white border border-slate-700 hover:bg-slate-800 transition-all">
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={guardandoAtencion}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 h-11 rounded-xl font-extrabold text-xs bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-950/50 transition-all active:scale-95 disabled:opacity-50">
+                  {guardandoAtencion ? (
+                    <>
+                      <Spinner size="sm" />
+                      <span>Guardando Consulta...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle size={17} weight="bold" />
+                      <span>Finalizar Atención y Guardar en Historia Clínica</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+            </form>
+          </div>
         </div>
       )}
 

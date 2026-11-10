@@ -1,7 +1,6 @@
 /**
- * seed.js — Inserta los usuarios iniciales de DataVet
- * Crea: admin (0000000001), veterinario (0000000002), recepcionista (0000000003)
- * Contraseña de todos: test1234
+ * seed.js — Inserta/actualiza los usuarios iniciales de DataVet
+ * Crea: Admin (666666666 / 123456), Recepcionista (1 / test1234), Veterinarios (2 y 3 / test1234)
  *
  * Uso: node scripts/seed.js
  */
@@ -15,29 +14,40 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
-const PASS = 'test1234';
-
 const usuarios = [
   {
-    cedula: '0000000001',
-    nombre: 'Administrador DataVet',
+    cedula: 666666666,
+    nombre: 'Juan Torres',
     email: 'admin@datavet.com',
-    rol: 'admin',
+    rol: 'Administrador',
+    pass: '123456',
   },
   {
-    cedula: '0000000002',
-    nombre: 'Carlos Mendoza',
-    email: 'carlos.mendoza@datavet.com',
-    rol: 'veterinario',
-    especialidad: 'Medicina Interna y Cirugía',
-    tarjeta_profesional: 'TP-VET-98421',
-    colegiada: 'COL-VET-042',
-  },
-  {
-    cedula: '0000000003',
-    nombre: 'Laura Recepción',
+    cedula: 1,
+    nombre: 'Laura Martinez',
     email: 'recepcion@datavet.com',
-    rol: 'recepcionista',
+    rol: 'Recepcionista',
+    pass: 'test1234',
+  },
+  {
+    cedula: 2,
+    nombre: 'Carlos Ramirez',
+    email: 'carlos@datavet.com',
+    rol: 'Veterinario',
+    pass: 'test1234',
+    especialidad: 'Medicina general',
+    tarjeta_profesional: 'TP-VET-001',
+    colegiado: 'COL-2024-001',
+  },
+  {
+    cedula: 3,
+    nombre: 'Ana Rodriguez',
+    email: 'ana@datavet.com',
+    rol: 'Veterinario',
+    pass: 'test1234',
+    especialidad: 'Cirugia veterinaria',
+    tarjeta_profesional: 'TP-VET-002',
+    colegiado: 'COL-2024-002',
   },
 ];
 
@@ -52,48 +62,32 @@ async function main() {
 
   console.log('✅ Conectado a MySQL\n');
 
-  const hash = await bcrypt.hash(PASS, 12);
-  console.log(`🔐 Hash generado para contraseña "${PASS}"\n`);
-
   for (const u of usuarios) {
-    // Obtener id del rol
     const [roles] = await conn.execute(
-      'SELECT id FROM roles WHERE nombre = ? LIMIT 1',
+      'SELECT id_rol FROM roles WHERE nombre_rol = ? LIMIT 1',
       [u.rol]
     );
 
     if (!roles.length) {
-      console.error(`❌ Rol "${u.rol}" no encontrado. ¿Aplicaste el schema.sql?`);
+      console.error(`❌ Rol "${u.rol}" no encontrado. ¿Aplicaste base de datos Datavet.sql?`);
       continue;
     }
 
-    const rolId = roles[0].id;
+    const rolId = roles[0].id_rol;
+    const hash = await bcrypt.hash(u.pass, 10);
 
     await conn.execute(
-      `INSERT INTO usuarios
-        (cedula, nombre, email, password_hash, rol_id, especialidad, tarjeta_profesional, colegiada, activo)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+      `INSERT INTO usuarios (cedula, nombre, email, password_hash, id_rol, activo)
+       VALUES (?, ?, ?, ?, ?, 1)
        ON DUPLICATE KEY UPDATE
         nombre = VALUES(nombre),
-        email = VALUES(email),
         password_hash = VALUES(password_hash),
-        rol_id = VALUES(rol_id),
-        especialidad = VALUES(especialidad),
-        tarjeta_profesional = VALUES(tarjeta_profesional),
-        colegiada = VALUES(colegiada)`,
-      [
-        u.cedula,
-        u.nombre,
-        u.email ?? null,
-        hash,
-        rolId,
-        u.especialidad ?? null,
-        u.tarjeta_profesional ?? null,
-        u.colegiada ?? null,
-      ]
+        id_rol = VALUES(id_rol),
+        activo = 1`,
+      [u.cedula, u.nombre, u.email, hash, rolId]
     );
 
-    console.log(`👤 ${u.rol.padEnd(15)} | Cédula: ${u.cedula} | ${u.nombre}`);
+    console.log(`👤 ${u.rol.padEnd(15)} | Cédula: ${String(u.cedula).padEnd(10)} | Clave: ${u.pass.padEnd(8)} | ${u.nombre}`);
   }
 
   await conn.end();
@@ -102,9 +96,10 @@ async function main() {
   console.log('─────────────────────────────────────────────');
   console.log('  Rol            │ Cédula       │ Contraseña');
   console.log('─────────────────────────────────────────────');
-  console.log('  Admin          │ 0000000001   │ test1234');
-  console.log('  Veterinario    │ 0000000002   │ test1234');
-  console.log('  Recepcionista  │ 0000000003   │ test1234');
+  console.log('  Admin          │ 666666666    │ 123456');
+  console.log('  Recepcionista  │ 1            │ test1234');
+  console.log('  Veterinario    │ 2            │ test1234');
+  console.log('  Veterinario    │ 3            │ test1234');
   console.log('─────────────────────────────────────────────');
 }
 

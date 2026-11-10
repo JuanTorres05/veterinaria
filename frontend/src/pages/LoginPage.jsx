@@ -98,8 +98,8 @@ export default function LoginPage() {
   }
 
   // Helper para auto-completar cuenta demo en 1 clic
-  function autofillDemo(cedula) {
-    setForm({ cedula, password: "test1234" });
+  function autofillDemo(cedula, password) {
+    setForm({ cedula, password });
     setErrors({});
     setApiError("");
   }
@@ -295,27 +295,27 @@ export default function LoginPage() {
                   <span>Accesos de Prueba (1-Clic)</span>
                 </span>
                 <span className="text-[10px] text-slate-400 font-mono">
-                  Clave: test1234
+                  Cuentas Demo BD
                 </span>
               </div>
 
               <div className="grid grid-cols-3 gap-2">
                 {[
-                  { label: "Admin", cedula: "0000000001", roleColor: "hover:border-cyan-500/50 hover:bg-cyan-950/30" },
-                  { label: "Veterinario", cedula: "0000000002", roleColor: "hover:border-emerald-500/50 hover:bg-emerald-950/30" },
-                  { label: "Recepción", cedula: "0000000003", roleColor: "hover:border-amber-500/50 hover:bg-amber-950/30" },
+                  { label: "Admin", cedula: "666666666", password: "123456", roleColor: "hover:border-cyan-500/50 hover:bg-cyan-950/30" },
+                  { label: "Veterinario", cedula: "2", password: "test1234", roleColor: "hover:border-emerald-500/50 hover:bg-emerald-950/30" },
+                  { label: "Recepción", cedula: "1", password: "test1234", roleColor: "hover:border-amber-500/50 hover:bg-amber-950/30" },
                 ].map((demo) => (
                   <button
                     key={demo.label}
                     type="button"
-                    onClick={() => autofillDemo(demo.cedula)}
+                    onClick={() => autofillDemo(demo.cedula, demo.password)}
                     className={`py-2 px-2 rounded-xl bg-slate-900 border border-slate-800 text-center transition-all group ${demo.roleColor}`}
-                    title={`Cargar credenciales de ${demo.label}`}>
+                    title={`Cargar credenciales de ${demo.label} (Clave: ${demo.password})`}>
                     <p className="text-[11px] font-semibold text-slate-300 group-hover:text-white">
                       {demo.label}
                     </p>
                     <p className="text-[9px] text-slate-500 font-mono truncate">
-                      {demo.cedula}
+                      C.C. {demo.cedula}
                     </p>
                   </button>
                 ))}

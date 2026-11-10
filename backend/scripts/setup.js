@@ -23,12 +23,11 @@ const USER     = process.env.DB_USER     || 'root';
 const PASSWORD = process.env.DB_PASSWORD || '';
 const DATABASE = process.env.DB_NAME     || 'datavet';
 
-const PASS = 'test1234';
-
 const usuarios = [
-  { cedula: '0000000001', nombre: 'Administrador DataVet',  email: 'admin@datavet.com',          rol: 'admin'          },
-  { cedula: '0000000002', nombre: 'Carlos Mendoza',         email: 'carlos.mendoza@datavet.com', rol: 'veterinario',   especialidad: 'Medicina Interna y Cirugía', tarjeta_profesional: 'TP-VET-98421', colegiada: 'COL-VET-042' },
-  { cedula: '0000000003', nombre: 'Laura Recepción',        email: 'recepcion@datavet.com',      rol: 'recepcionista'  },
+  { cedula: 666666666, nombre: 'Juan Torres',     email: 'admin@datavet.com',     rol: 'Administrador', pass: '123456' },
+  { cedula: 1,         nombre: 'Laura Martinez',  email: 'recepcion@datavet.com', rol: 'Recepcionista', pass: 'test1234' },
+  { cedula: 2,         nombre: 'Carlos Ramirez',  email: 'carlos@datavet.com',    rol: 'Veterinario',   pass: 'test1234', especialidad: 'Medicina general',    tarjeta_profesional: 'TP-VET-001', colegiado: 'COL-2024-001' },
+  { cedula: 3,         nombre: 'Ana Rodriguez',   email: 'ana@datavet.com',       rol: 'Veterinario',   pass: 'test1234', especialidad: 'Cirugia veterinaria', tarjeta_profesional: 'TP-VET-002', colegiado: 'COL-2024-002' },
 ];
 
 async function main() {
@@ -39,12 +38,11 @@ async function main() {
   await rootConn.end();
   console.log(`✅ Base de datos lista.\n`);
 
-  // ── 2. Aplicar el schema.sql ───────────────────────────────────────────────
-  console.log(`📋 PASO 2 — Aplicando schema.sql...`);
-  const schemaPath = path.resolve(__dirname, '../../database/schema.sql');
+  // ── 2. Aplicar el script SQL principal ─────────────────────────────────────
+  console.log(`📋 PASO 2 — Aplicando base de datos Datavet.sql...`);
+  const schemaPath = path.resolve(__dirname, '../../database/base de datos Datavet.sql');
   const schemaSql  = fs.readFileSync(schemaPath, 'utf8');
 
-  // Necesitamos multipleStatements para ejecutar varios SEQLs juntos
   const schemaConn = await mysql.createConnection({
     host: HOST, port: PORT, user: USER, password: PASSWORD,
     database: DATABASE,
@@ -52,35 +50,35 @@ async function main() {
   });
   await schemaConn.query(schemaSql);
   await schemaConn.end();
-  console.log(`✅ Schema aplicado correctamente.\n`);
+  console.log(`✅ Esquema y datos base aplicados correctamente.\n`);
 
-  // ── 3. Insertar usuarios de prueba ─────────────────────────────────────────
-  console.log(`👥 PASO 3 — Insertando usuarios de prueba...`);
+  // ── 3. Verificar / sincronizar usuarios de prueba ──────────────────────────
+  console.log(`👥 PASO 3 — Sincronizando cuentas de prueba...`);
   const conn = await mysql.createConnection({ host: HOST, port: PORT, user: USER, password: PASSWORD, database: DATABASE });
 
-  const hash = await bcrypt.hash(PASS, 12);
-
   for (const u of usuarios) {
-    const [roles] = await conn.execute('SELECT id FROM roles WHERE nombre = ? LIMIT 1', [u.rol]);
+    const [roles] = await conn.execute('SELECT id_rol FROM roles WHERE nombre_rol = ? LIMIT 1', [u.rol]);
 
     if (!roles.length) {
       console.error(`❌ Rol "${u.rol}" no encontrado.`);
       continue;
     }
 
-    const rolId = roles[0].id;
+    const rolId = roles[0].id_rol;
+    const hash = await bcrypt.hash(u.pass, 10);
 
     await conn.execute(
-      `INSERT INTO usuarios (cedula, nombre, email, password_hash, rol_id, especialidad, tarjeta_profesional, colegiada, activo)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+      `INSERT INTO usuarios (cedula, nombre, email, password_hash, id_rol, activo)
+       VALUES (?, ?, ?, ?, ?, 1)
        ON DUPLICATE KEY UPDATE
-         nombre = VALUES(nombre), email = VALUES(email), password_hash = VALUES(password_hash),
-         rol_id = VALUES(rol_id), especialidad = VALUES(especialidad),
-         tarjeta_profesional = VALUES(tarjeta_profesional), colegiada = VALUES(colegiada)`,
-      [u.cedula, u.nombre, u.email ?? null, hash, rolId, u.especialidad ?? null, u.tarjeta_profesional ?? null, u.colegiada ?? null]
+         nombre = VALUES(nombre),
+         password_hash = VALUES(password_hash),
+         id_rol = VALUES(id_rol),
+         activo = 1`,
+      [u.cedula, u.nombre, u.email, hash, rolId]
     );
 
-    console.log(`  ✔ ${u.rol.padEnd(15)} | ${u.cedula} | ${u.nombre}`);
+    console.log(`  ✔ ${u.rol.padEnd(15)} | C.C. ${String(u.cedula).padEnd(10)} | Clave: ${u.pass.padEnd(8)} | ${u.nombre}`);
   }
 
   await conn.end();
@@ -91,9 +89,10 @@ async function main() {
 ╠══════════════════════════════════════════════════════╣
 ║  Rol            │ Cédula       │ Contraseña          ║
 ║─────────────────┼──────────────┼─────────────────────║
-║  Admin          │ 0000000001   │ test1234            ║
-║  Veterinario    │ 0000000002   │ test1234            ║
-║  Recepcionista  │ 0000000003   │ test1234            ║
+║  Admin          │ 666666666    │ 123456              ║
+║  Recepcionista  │ 1            │ test1234            ║
+║  Veterinario    │ 2            │ test1234            ║
+║  Veterinario    │ 3            │ test1234            ║
 ╚══════════════════════════════════════════════════════╝
 
   Ahora ejecuta:  npm run dev

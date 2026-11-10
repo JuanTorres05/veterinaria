@@ -4,7 +4,7 @@ import Spinner from "../components/Spinner";
 import api from "../services/api";
 import {
   User, Phone, Envelope, Plus, Trash, Check, WarningCircle, Notebook,
-  Cat, ArrowRight, ArrowLeft, CheckCircle, FolderUser
+  Cat, ArrowRight, ArrowLeft, CheckCircle, FolderUser, CalendarBlank
 } from "@phosphor-icons/react";
 
 /* Constantes iniciales */
@@ -285,14 +285,29 @@ function PetCard({ mascota, index, onUpdate, onRemove, errors, canRemove }) {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <FieldLabel htmlFor={`m-nacimiento-${index}`}>Fecha de nacimiento</FieldLabel>
-            <input
-              id={`m-nacimiento-${index}`}
-              type="date"
-              max={todayStr}
-              value={mascota.fechaNacimiento}
-              onChange={e => onUpdate(index, "fechaNacimiento", e.target.value)}
-              className={`input-field ${errors?.fechaNacimiento ? "border-rose-500 ring-1 ring-rose-500" : ""}`}
-            />
+            <div className="relative">
+              <input
+                id={`m-nacimiento-${index}`}
+                type="date"
+                max={todayStr}
+                value={mascota.fechaNacimiento}
+                onChange={e => onUpdate(index, "fechaNacimiento", e.target.value)}
+                className={`input-field picker-custom pr-12 cursor-pointer ${errors?.fechaNacimiento ? "border-rose-500 ring-1 ring-rose-500" : ""}`}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const el = document.getElementById(`m-nacimiento-${index}`);
+                  if (el?.showPicker) {
+                    try { el.showPicker(); return; } catch { /* fallback */ }
+                  }
+                  el?.focus();
+                }}
+                title="Seleccionar fecha de nacimiento"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg bg-sky-600 hover:bg-sky-500 text-white flex items-center justify-center shadow-xs transition-all active:scale-95">
+                <CalendarBlank size={16} weight="bold" />
+              </button>
+            </div>
             <FieldError msg={errors?.fechaNacimiento} />
           </div>
 

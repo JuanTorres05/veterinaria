@@ -23,7 +23,6 @@
    - [1. Base de Datos (MySQL / MariaDB)](#1-base-de-datos)
    - [2. Backend (API REST Express)](#2-backend-api-rest)
    - [3. Frontend Web (React + Vite + Tailwind)](#3-frontend-web)
-   - [4. App Móvil (React Native + Expo)](#4-app-móvil)
 8. [Catálogo de Endpoints de la API REST](#-catálogo-de-endpoints-de-la-api-rest)
 9. [Seguridad y Buenas Prácticas](#-seguridad-y-buenas-prácticas)
 
@@ -35,9 +34,8 @@ El ecosistema está construido bajo una arquitectura cliente-servidor desacoplad
 
 ```mermaid
 flowchart TD
-    subgraph Clientes ["📱 Clientes"]
+    subgraph Cliente ["💻 Cliente Web"]
         WEB["💻 Frontend Web (React 19 + Vite)"]
-        MOB["📱 App Móvil (React Native + Expo)"]
     end
 
     subgraph Backend ["⚙️ Backend API (Node.js + Express)"]
@@ -54,7 +52,6 @@ flowchart TD
     end
 
     WEB -->|HTTP REST / JSON / Bearer JWT| AUTH
-    MOB -->|HTTP REST / JSON / Bearer JWT| AUTH
     AUTH --> RATE --> ROUTERS --> ZOD --> SERVICE --> REPO --> DB
 ```
 
@@ -63,7 +60,7 @@ flowchart TD
 ## 📁 Estructura del Proyecto
 
 ```text
-datapet_movil/
+datavet/
 ├── backend/                   # Servidor Express.js (API REST)
 │   ├── src/
 │   │   ├── config/            # Variables de entorno y configuraciones (env.js)
@@ -102,13 +99,6 @@ datapet_movil/
 │   │   ├── App.jsx            # Definición de rutas protegidas
 │   │   └── main.jsx
 │   ├── .env                   # VITE_API_URL configurado a http://localhost:3000/api
-│   └── package.json
-│
-├── mobile/                    # Aplicación Móvil (React Native + Expo)
-│   ├── src/
-│   │   ├── config/            # apiConfig.js con IP de red local
-│   │   ├── screens/           # Login, Registro, Home y Recuperación
-│   │   └── utils/             # Almacenamiento seguro de tokens
 │   └── package.json
 │
 └── database/                  # Scripts SQL y esquemas relacionales
@@ -262,27 +252,6 @@ La base de datos cuenta con los siguientes perfiles precargados para pruebas:
    npm run dev
    ```
 5. Abre tu navegador en la URL indicada (habitualmente `http://localhost:5173`).
-
----
-
-### 4. App Móvil (Opcional)
-
-1. Navega al directorio móvil:
-   ```bash
-   cd mobile
-   ```
-2. Instala las dependencias:
-   ```bash
-   npm install
-   ```
-3. Revisa la IP local de tu máquina en `mobile/src/config/apiConfig.js`:
-   ```javascript
-   export const API_BASE_URL = 'http://TU_IP_LOCAL:3000/api';
-   ```
-4. Inicia la aplicación con Expo:
-   ```bash
-   npx expo start
-   ```
 
 ---
 

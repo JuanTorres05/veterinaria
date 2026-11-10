@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 import api from "../services/api";
 import { 
   Users, MagnifyingGlass, Phone, Envelope, Cat, Dog, Bird, PawPrint,
@@ -27,6 +28,8 @@ function getEspecieBadge(especie) {
 const ITEMS_PER_PAGE = 6;
 
 export default function PacientesPage() {
+  const { user } = useAuth();
+  const canRegister = user?.rol === "admin" || user?.rol === "recepcionista";
   const [clientes,     setClientes]     = useState([]);
   const [loading,      setLoading]      = useState(true);
   const [error,        setError]        = useState("");
@@ -88,10 +91,12 @@ export default function PacientesPage() {
           </div>
         </div>
 
-        <Link to="/registrar" className="btn-action-create">
-          <Plus size={16} weight="bold" />
-          <span>Nuevo Registro</span>
-        </Link>
+        {canRegister && (
+          <Link to="/registrar" className="btn-action-create">
+            <Plus size={16} weight="bold" />
+            <span>Nuevo Registro</span>
+          </Link>
+        )}
       </div>
 
       {/* Buscador Local Diferenciado Visualmente del Buscador Global del Header */}

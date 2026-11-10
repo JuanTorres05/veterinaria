@@ -1,13 +1,45 @@
 import { z } from 'zod';
 
+const ALLOWED_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'application/pdf'
+]);
+
+export const archivoInputSchema = z.object({
+  nombre_archivo: z.string().trim().min(1, 'El nombre del archivo es obligatorio.').max(255),
+  mime_type: z
+    .string()
+    .trim()
+    .refine((m) => ALLOWED_MIME_TYPES.has(m.toLowerCase()), {
+      message: 'Solo se permiten imágenes (JPG, PNG, WEBP, GIF) o documentos PDF.',
+    }),
+  tamano_bytes: z.coerce.number().int().nonnegative().max(12 * 1024 * 1024, 'El archivo no debe superar los 12 MB.').optional().nullable(),
+  base64_data: z.string().min(10, 'El contenido del archivo es inválido.'),
+});
+
 export const crearHistorialSchema = z.object({
+  cita_id: z.coerce.number().int().positive().optional().nullable(),
+  peso_kg: z
+    .union([z.number(), z.string()])
+    .optional()
+    .nullable()
+    .transform((val) => {
+      if (val === '' || val === null || val === undefined) return null;
+      const n = Number(val);
+      return isNaN(n) ? null : n;
+    })
+    .refine((n) => n === null || (n > 0 && n <= 300), 'El peso debe estar entre 0.1 y 300 kg.'),
   fecha: z
     .string({ required_error: 'La fecha es obligatoria.' })
     .refine((val) => !isNaN(Date.parse(val)), {
       message: 'La fecha de la consulta no es válida.',
     })
-    // SEGURIDAD I2: una consulta clínica no puede ser en el futuro
-    .refine((val) => new Date(val) <= new Date(), {
+    // SEGURIDAD I2: una consulta clínica no puede ser en el futuro (tolerancia 5 min)
+    .refine((val) => new Date(val) <= new Date(Date.now() + 5 * 60 * 1000), {
       message: 'La fecha de la consulta no puede ser futura.',
     }),
   motivo: z
@@ -26,4 +58,26 @@ export const crearHistorialSchema = z.object({
     .min(3, 'El tratamiento asignado debe tener al menos 3 caracteres.')
     .max(1000, 'El tratamiento no puede superar 1000 caracteres.'),
   notas: z.string().trim().max(1000, 'Las notas no pueden superar 1000 caracteres.').optional().nullable(),
+  archivos: z.array(archivoInputSchema).max(10, 'Máximo 10 archivos por consulta.').optional().default([]),
+});
+
+export const crearProcedimientoSchema = z.object({
+  consulta_id: z.coerce.number().int().positive().optional().nullable(),
+  tipo_procedimiento: z
+    .string({ required_error: 'El tipo de procedimiento es obligatorio.' })
+    .trim()
+    .min(3, 'El tipo de procedimiento debe tener al menos 3 caracteres.')
+    .max(120, 'El tipo de procedimiento no puede superar 120 caracteres.'),
+  descripcion: z
+    .string({ required_error: 'La descripción del procedimiento es obligatoria.' })
+    .trim()
+    .min(3, 'La descripción debe tener al menos 3 caracteres.')
+    .max(1500, 'La descripción no puede superar 1500 caracteres.'),
+  observaciones: z.string().trim().max(1000, 'Las observaciones no pueden superar 1000 caracteres.').optional().nullable(),
+  fecha_procedimiento: z.string().optional().nullable(),
+  archivos: z.array(archivoInputSchema).max(10, 'Máximo 10 archivos por procedimiento.').optional().default([]),
+});
+
+export const subirArchivosSchema = z.object({
+  archivos: z.array(archivoInputSchema).min(1, 'Debes adjuntar al menos un archivo.').max(10, 'Máximo 10 archivos a la vez.'),
 });

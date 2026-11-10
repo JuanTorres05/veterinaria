@@ -21,22 +21,12 @@ async function main() {
     multipleStatements: true,
   });
 
-  const schemaPath = path.resolve('../database/schema.sql');
+  const schemaPath = path.resolve(__dirname, '../../database/base de datos Datavet.sql');
   console.log(`Reading schema from ${schemaPath}...`);
   const schemaSql = fs.readFileSync(schemaPath, 'utf8');
 
-  // Dividir por declaraciones SQL individuales
-  const statements = schemaSql
-    .split(';')
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-
-  console.log(`Applying ${statements.length} schema statements...`);
-  for (const stmt of statements) {
-    if (stmt) {
-      await conn.query(stmt);
-    }
-  }
+  console.log('Applying database script...');
+  await conn.query(schemaSql);
 
   console.log('Schema applied successfully.');
   await conn.end();

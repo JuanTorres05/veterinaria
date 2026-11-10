@@ -3,9 +3,14 @@ import cors from 'cors';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
 import { randomUUID } from 'node:crypto';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import routes from './routes/index.js';
 import { errorHandler } from './middlewares/error.middleware.js';
 import { env } from './config/env.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 
@@ -46,6 +51,7 @@ app.use('/api/auth', rateLimit({
   message: { message: 'Demasiados intentos. Intenta de nuevo más tarde.' }
 }));
 
+app.use('/uploads', express.static(path.resolve(__dirname, '../uploads')));
 app.use('/api', routes);
 app.use(errorHandler);
 
