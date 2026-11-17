@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Spinner from "../components/Spinner";
 import api from "../services/api";
+import { useFeedback } from "../context/FeedbackContext";
+import PetPhotoPicker from "../components/PetPhotoPicker";
 import {
   User, Phone, Envelope, Plus, Trash, Check, WarningCircle, Notebook,
   Cat, ArrowRight, ArrowLeft, CheckCircle, FolderUser, CalendarBlank
@@ -339,6 +341,11 @@ function PetCard({ mascota, index, onUpdate, onRemove, errors, canRemove }) {
             />
           </div>
         </div>
+
+        <PetPhotoPicker
+          value={mascota.foto || null}
+          onChange={(foto) => onUpdate(index, "foto", foto)}
+        />
       </div>
     </div>
   );
@@ -357,6 +364,7 @@ function SummaryRow({ label, value }) {
 /* Componente Principal */
 export default function RegistrarPage() {
   const navigate = useNavigate();
+  const { confirm } = useFeedback();
   const [step,        setStep]        = useState(1);
   const [form,        setForm]        = useState(FORM_INIT);
   const [errors,      setErrors]      = useState({ cliente: {}, mascotas: [{}] });
@@ -379,10 +387,16 @@ export default function RegistrarPage() {
   }
 
   /* Confirmación de acción destructiva antes de eliminar una mascota del formulario */
-  function removeMascota(index) {
+  async function removeMascota(index) {
     if (form.mascotas.length <= 1) return;
     const petName = form.mascotas[index]?.nombre.trim() || `Mascota #${index + 1}`;
-    if (window.confirm(`¿Confirma que desea remover a ${petName} de la lista de registro?`)) {
+    const ok = await confirm({
+      title: "Remover mascota",
+      message: `¿Confirma que desea remover a ${petName} de la lista de registro?`,
+      confirmLabel: "Remover",
+      tone: "danger",
+    });
+    if (ok) {
       setForm(f => ({ ...f, mascotas: f.mascotas.filter((_, i) => i !== index) }));
       setErrors(e => ({ ...e, mascotas: e.mascotas.filter((_, i) => i !== index) }));
     }
@@ -668,7 +682,11 @@ export default function RegistrarPage() {
                           key={i} 
                           className="flex items-center gap-3 p-3.5 rounded-xl border"
                           style={{ backgroundColor: p.bg, borderColor: p.bd }}>
-                          <span className="text-2xl">{esp?.icon || "🐾"}</span>
+                          {m.foto?.base64_data ? (
+                            <img src={m.foto.base64_data} alt={m.nombre} className="w-10 h-10 rounded-lg object-cover border border-white shadow-2xs" />
+                          ) : (
+                            <span className="text-2xl">{esp?.icon || "🐾"}</span>
+                          )}
                           <div>
                             <p className="font-bold text-sm" style={{ color: p.accent }}>
                               {m.nombre || "—"}

@@ -1,4 +1,13 @@
 import pool from '../../db/pool.js';
+import { guardarFotoMascotaEnDisco } from '../mascotas/mascotas.repository.js';
+
+export async function buscarPorId(id, executor = pool) {
+  const [rows] = await executor.execute(
+    'SELECT id_cliente AS id, nombre, apellido, cedula, email AS correo FROM clientes WHERE id_cliente = ? AND activo = 1 LIMIT 1',
+    [id]
+  );
+  return rows[0] || null;
+}
 
 export async function buscarPorCedula(cedula, executor = pool) {
   const [rows] = await executor.execute(
@@ -24,8 +33,6 @@ export async function crearCliente(cliente, executor = pool) {
     const parts = nombre.split(/\s+/);
     nombre = parts[0];
     apellido = parts.slice(1).join(' ');
-  } else if (!apellido) {
-    apellido = '.'; // campo NOT NULL en la BD
   }
 
   const [result] = await executor.execute(
@@ -60,6 +67,12 @@ export async function crearMascota(clienteId, mascota, executor = pool) {
   );
   const mascotaId = result.insertId;
 
+  // Guardar foto de perfil si fue adjuntada o tomada con la cámara
+  if (mascota.foto) {
+    const fotoUrl = await guardarFotoMascotaEnDisco(mascotaId, mascota.foto);
+    await executor.execute('UPDATE mascotas SET foto_url = ? WHERE id_mascota = ?', [fotoUrl, mascotaId]);
+  }
+
   // Aperturar historia clínica automáticamente para la nueva mascota
   try {
     await executor.execute(
@@ -89,7 +102,20 @@ export async function listarConMascotas() {
        m.nombre         AS mascota_nombre,
        m.especie,
        m.raza,
-       m.sexo
+       m.sexo,
+       m.fecha_nacimiento,
+       m.peso AS peso_kg,
+       m.foto_url,
+       EXISTS(
+         SELECT 1 FROM hospitalizaciones h
+         WHERE h.id_mascota = m.id_mascota AND h.estado = 'Activa'
+       ) AS hospitalizado,
+       EXISTS(
+         SELECT 1 FROM citas c
+         JOIN estados_cita e ON e.id_estado = c.id_estado
+         WHERE c.id_mascota = m.id_mascota
+           AND e.nombre_estado IN ('Programada', 'Confirmada', 'En atención')
+       ) AS en_seguimiento
      FROM clientes c
      LEFT JOIN mascotas m ON m.id_cliente = c.id_cliente AND m.activo = 1
      WHERE c.activo = 1

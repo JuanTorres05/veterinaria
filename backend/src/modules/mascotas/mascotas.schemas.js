@@ -58,6 +58,26 @@ export const crearHistorialSchema = z.object({
     .min(3, 'El tratamiento asignado debe tener al menos 3 caracteres.')
     .max(1000, 'El tratamiento no puede superar 1000 caracteres.'),
   notas: z.string().trim().max(1000, 'Las notas no pueden superar 1000 caracteres.').optional().nullable(),
+  requiere_hospitalizacion: z.boolean().optional().default(false),
+  motivo_hospitalizacion: z.string().trim().max(255).optional().nullable(),
+  receta: z
+    .object({
+      indicaciones_generales: z.string().trim().max(500).optional().nullable(),
+      medicamentos: z
+        .array(
+          z.object({
+            id_medicamento: z.coerce.number().int().positive('Selecciona un medicamento válido.'),
+            dosis: z.string().trim().min(1, 'La dosis es obligatoria.').max(120),
+            frecuencia: z.string().trim().max(120).optional().nullable(),
+            duracion: z.string().trim().max(120).optional().nullable(),
+            instrucciones: z.string().trim().max(500).optional().nullable(),
+          })
+        )
+        .max(15, 'Máximo 15 medicamentos por receta.')
+        .default([]),
+    })
+    .optional()
+    .nullable(),
   archivos: z.array(archivoInputSchema).max(10, 'Máximo 10 archivos por consulta.').optional().default([]),
 });
 
@@ -80,4 +100,18 @@ export const crearProcedimientoSchema = z.object({
 
 export const subirArchivosSchema = z.object({
   archivos: z.array(archivoInputSchema).min(1, 'Debes adjuntar al menos un archivo.').max(10, 'Máximo 10 archivos a la vez.'),
+});
+
+export const subirFotoMascotaSchema = z.object({
+  archivo: z.object({
+    nombre_archivo: z.string().trim().min(1).max(255),
+    mime_type: z
+      .string()
+      .trim()
+      .refine((m) => ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'].includes(m.toLowerCase()), {
+        message: 'La foto de perfil debe ser una imagen (JPG, PNG, WEBP o GIF).',
+      }),
+    tamano_bytes: z.coerce.number().int().nonnegative().max(10 * 1024 * 1024, 'La foto no debe superar los 10 MB.').optional().nullable(),
+    base64_data: z.string().min(10, 'El contenido de la imagen es inválido.'),
+  }),
 });

@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useFeedback } from '../context/FeedbackContext';
 import api from '../services/api';
 import Spinner from '../components/Spinner';
-import { formatBytes, leerArchivosParaSubida } from '../utils/archivos';
+import RecetaFormSection from '../components/RecetaFormSection';
+import { formatBytes, leerArchivosParaSubida, resolveArchivoUrl } from '../utils/archivos';
 import {
   Monitor,
   Clock,
@@ -86,46 +88,80 @@ function LiveIndicator({ onRefresh, isRefreshing }) {
 
 /* ── CitaCard Con Botón Cancelar Discreto (Baja Prominencia) ────────────── */
 function CitaCard({ cita, onCambiarEstado, onAtenderCita, loadingId, userRol }) {
+  const { confirm } = useFeedback();
   const isPendiente = cita.estado === 'pendiente';
   const isAtendida  = cita.estado === 'atendida';
   const isCancelada = cita.estado === 'cancelada';
+  const enAtencion  = isPendiente && cita.estado_detalle === 'En atención';
+  const confirmada  = isPendiente && cita.estado_detalle === 'Confirmada';
   const isLoading   = loadingId === cita.id;
 
   const esVetOAdmin   = ['admin', 'veterinario'].includes(userRol);
   const puedeAtender  = ['admin', 'veterinario', 'recepcionista'].includes(userRol);
   const puedeCancelar = ['admin', 'recepcionista'].includes(userRol);
 
-  function handleCancelarClick() {
-    if (window.confirm(`¿Confirma que desea cancelar la cita de ${cita.mascota_nombre}?`)) {
+  async function handleCancelarClick() {
+    const ok = await confirm({
+      title: 'Cancelar cita',
+      message: `¿Confirma que desea cancelar la cita de ${cita.mascota_nombre}?`,
+      confirmLabel: 'Sí, cancelar cita',
+      tone: 'danger',
+    });
+    if (ok) {
       onCambiarEstado(cita.id, 'cancelada');
     }
   }
 
   return (
     <div className={`bg-white border rounded-2xl p-5 shadow-xs transition-all ${
-      isCancelada ? 'opacity-55 border-slate-200 bg-slate-50' : 'border-slate-200 hover:shadow-md'
+      isCancelada
+        ? 'opacity-55 border-slate-200 bg-slate-50'
+        : enAtencion
+        ? 'border-sky-300 ring-1 ring-sky-100 hover:shadow-md'
+        : 'border-slate-200 hover:shadow-md'
     }`}>
       <div className="flex items-start gap-3.5">
-        {/* Icono Especie */}
-        <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 border ${
+        {/* Icono o Foto de Mascota */}
+        <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 border overflow-hidden ${
           isPendiente
             ? 'bg-amber-50 border-amber-200'
             : isAtendida
             ? 'bg-emerald-50 border-emerald-200'
             : 'bg-rose-50 border-rose-200'
         }`}>
-          {renderSpeciesIcon(cita.especie)}
+          {cita.mascota_foto_url ? (
+            <img
+              src={resolveArchivoUrl(cita.mascota_foto_url)}
+              alt={cita.mascota_nombre}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            renderSpeciesIcon(cita.especie)
+          )}
         </div>
 
         {/* Info Paciente y Propietario */}
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
             <div>
-              <p className="font-extrabold text-slate-900 text-sm leading-tight">
-                {cita.mascota_nombre}
-                <span className="text-slate-400 font-normal text-xs ml-1.5">
-                  ({cita.especie})
+              <p className="font-extrabold text-slate-900 text-sm leading-tight flex items-center gap-2 flex-wrap">
+                <span>
+                  {cita.mascota_nombre}
+                  <span className="text-slate-400 font-normal text-xs ml-1.5">
+                    ({cita.especie})
+                  </span>
                 </span>
+                {enAtencion && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 border border-sky-200 text-[10px] font-bold uppercase tracking-wider">
+                    <span className="w-1.5 h-1.5 rounded-full bg-sky-600 animate-pulse" />
+                    En atención
+                  </span>
+                )}
+                {confirmada && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold uppercase tracking-wider">
+                    Confirmada
+                  </span>
+                )}
               </p>
               <p className="text-xs text-slate-500 mt-1 flex items-center gap-1 font-medium">
                 <User size={12} className="text-slate-400 flex-shrink-0" />
@@ -174,13 +210,19 @@ function CitaCard({ cita, onCambiarEstado, onAtenderCita, loadingId, userRol }) 
               <span>Atender Cita</span>
             </button>
           ) : puedeAtender ? (
-            <button
-              onClick={() => onCambiarEstado(cita.id, 'atendida')}
-              disabled={isLoading}
-              className="btn-action-nav flex-1 justify-center h-9 text-xs">
-              <CheckCircle size={15} weight="bold" />
-              <span>{isLoading ? 'Guardando...' : 'Marcar Atendida'}</span>
-            </button>
+            !enAtencion ? (
+              <button
+                onClick={() => onCambiarEstado(cita.id, 'en_atencion')}
+                disabled={isLoading}
+                className="btn-action-nav flex-1 justify-center h-9 text-xs">
+                <CheckCircle size={15} weight="bold" />
+                <span>{isLoading ? 'Guardando...' : 'Pasar a Consulta'}</span>
+              </button>
+            ) : (
+              <span className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-xl bg-sky-50 border border-sky-200 text-sky-800 text-xs font-bold">
+                En consultorio con el veterinario
+              </span>
+            )
           ) : null}
 
           {/* Botón Cancelar sutil / discreto de baja prominencia para evitar clics accidentales */}
@@ -229,6 +271,7 @@ function CitaCard({ cita, onCambiarEstado, onAtenderCita, loadingId, userRol }) 
 /* ── Componente Principal ────────────────────────────────────────────────── */
 export default function MonitoreoPage() {
   const { user } = useAuth();
+  const { notify } = useFeedback();
   const [citas, setCitas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -243,6 +286,9 @@ export default function MonitoreoPage() {
   const [diagnosticoInput, setDiagnosticoInput] = useState('');
   const [tratamientoInput, setTratamientoInput] = useState('');
   const [notasInput, setNotasInput] = useState('');
+  const [requiereHosp, setRequiereHosp] = useState(false);
+  const [recetaMeds, setRecetaMeds] = useState([]);
+  const [indicacionesReceta, setIndicacionesReceta] = useState('');
   const [archivosInput, setArchivosInput] = useState([]);
   const [atencionError, setAtencionError] = useState('');
   const [guardandoAtencion, setGuardandoAtencion] = useState(false);
@@ -279,13 +325,13 @@ export default function MonitoreoPage() {
   async function handleCambiarEstado(citaId, nuevoEstado) {
     try {
       setLoadingId(citaId);
-      await api.patch(`/citas/${citaId}/estado`, { estado: nuevoEstado });
+      const { data } = await api.patch(`/citas/${citaId}/estado`, { estado: nuevoEstado });
       setCitas((prev) =>
-        prev.map((c) => (c.id === citaId ? { ...c, estado: nuevoEstado } : c))
+        prev.map((c) => (c.id === citaId ? { ...c, ...data } : c))
       );
     } catch (err) {
       console.error(err);
-      alert('No se pudo actualizar el estado de la cita.');
+      notify.error(err.response?.data?.message || 'No se pudo actualizar el estado de la cita.');
     } finally {
       setLoadingId(null);
     }
@@ -298,6 +344,9 @@ export default function MonitoreoPage() {
     setDiagnosticoInput('');
     setTratamientoInput('');
     setNotasInput('');
+    setRequiereHosp(false);
+    setRecetaMeds([]);
+    setIndicacionesReceta('');
     setArchivosInput([]);
     setAtencionError('');
   }
@@ -328,6 +377,10 @@ export default function MonitoreoPage() {
       return setAtencionError('El tratamiento o prescripción es obligatorio (mínimo 3 caracteres).');
     }
 
+    if (recetaMeds.some((m) => !m.id_medicamento || !m.dosis.trim())) {
+      return setAtencionError('Completa el medicamento y la dosis en cada fila de la receta (o quita las filas vacías).');
+    }
+
     const tzOffset = new Date().getTimezoneOffset() * 60000;
     const localISOTime = new Date(Date.now() - tzOffset).toISOString().slice(0, 19);
 
@@ -342,6 +395,19 @@ export default function MonitoreoPage() {
         tratamiento: tratamientoInput.trim(),
         notas: notasInput.trim() || null,
         peso_kg: pesoInput !== '' ? Number(pesoInput) : null,
+        requiere_hospitalizacion: requiereHosp,
+        receta: recetaMeds.length > 0
+          ? {
+              indicaciones_generales: indicacionesReceta.trim() || null,
+              medicamentos: recetaMeds.map((m) => ({
+                id_medicamento: Number(m.id_medicamento),
+                dosis: m.dosis.trim(),
+                frecuencia: m.frecuencia.trim() || null,
+                duracion: m.duracion.trim() || null,
+                instrucciones: m.instrucciones.trim() || null,
+              })),
+            }
+          : null,
         archivos: archivosInput,
       });
 
@@ -378,7 +444,7 @@ export default function MonitoreoPage() {
           <div>
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                Monitoreo en Tiempo Real
+                Sala de Espera en Tiempo Real
               </span>
               <span className="text-slate-300">•</span>
               <span className="text-xs font-semibold text-slate-500 capitalize">
@@ -386,7 +452,7 @@ export default function MonitoreoPage() {
               </span>
             </div>
             <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">
-              Flujo de Atención Médica
+              Sala de Espera y Atención del Día
             </h1>
           </div>
         </div>
@@ -724,6 +790,32 @@ export default function MonitoreoPage() {
                   className="w-full p-3.5 rounded-xl border border-slate-700 bg-slate-900 text-white placeholder-slate-500 text-xs font-medium focus:outline-none focus:border-emerald-500 resize-none"
                 />
               </div>
+
+              {/* Receta Médica Estructurada */}
+              <RecetaFormSection
+                recetaMeds={recetaMeds}
+                setRecetaMeds={setRecetaMeds}
+                indicacionesReceta={indicacionesReceta}
+                setIndicacionesReceta={setIndicacionesReceta}
+              />
+
+              {/* Opción de Hospitalización */}
+              <label className="flex items-start gap-3 p-3.5 rounded-xl border border-slate-700 bg-slate-900/80 cursor-pointer hover:border-sky-500/60 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={requiereHosp}
+                  onChange={(e) => setRequiereHosp(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 rounded accent-sky-500"
+                />
+                <div>
+                  <span className="text-xs font-bold text-white block">
+                    Requiere hospitalización / internación
+                  </span>
+                  <span className="text-[11px] text-slate-400">
+                    Ingresará automáticamente al módulo de Hospitalización vinculado a esta consulta.
+                  </span>
+                </div>
+              </label>
 
               {/* Fila 5: Adjuntar Fotos o PDFs al Historial Clínico */}
               <div>

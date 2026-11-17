@@ -4,6 +4,9 @@ import { requireAuth, requireRole } from '../../middlewares/auth.middleware.js';
 
 const router = Router();
 
+// GET /api/mascotas/medicamentos — Catálogo de medicamentos activos para prescripción
+router.get('/medicamentos', requireAuth, mascotasController.listarMedicamentos);
+
 // GET /api/mascotas/cliente/:clienteId — Lista mascotas de un cliente
 router.get('/cliente/:clienteId', requireAuth, mascotasController.listarPorCliente);
 
@@ -40,6 +43,14 @@ router.post(
   requireAuth,
   requireRole('admin', 'veterinario'),
   mascotasController.adjuntarArchivosProcedimiento
+);
+
+// PATCH /api/mascotas/:id/foto — Subir o actualizar foto de perfil de la mascota
+router.patch(
+  '/:id/foto',
+  requireAuth,
+  requireRole('admin', 'recepcionista', 'veterinario'),
+  mascotasController.subirFoto
 );
 
 // DELETE /api/mascotas/:id/archivos/:archivoId — Eliminar un archivo adjunto

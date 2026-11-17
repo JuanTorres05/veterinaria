@@ -73,6 +73,20 @@ export async function actualizarEstado(id_usuario, activo) {
   await pool.execute('UPDATE veterinarios SET activo = ? WHERE id_usuario = ?', [activo ? 1 : 0, id_usuario]);
 }
 
+export async function contarCitasFuturasPendientes(id_usuario) {
+  const [[row]] = await pool.execute(
+    `SELECT COUNT(*) AS total
+     FROM citas c
+     INNER JOIN veterinarios v ON v.id_veterinario = c.id_veterinario
+     INNER JOIN estados_cita e ON e.id_estado = c.id_estado
+     WHERE v.id_usuario = ?
+       AND c.fecha_hora >= NOW()
+       AND e.nombre_estado IN ('Programada', 'Confirmada', 'En atención')`,
+    [id_usuario]
+  );
+  return row?.total || 0;
+}
+
 export async function actualizarPassword(id_usuario, passwordHash) {
   await pool.execute('UPDATE usuarios SET password_hash = ? WHERE id_usuario = ?', [passwordHash, id_usuario]);
 }

@@ -29,7 +29,7 @@ export async function cambiarEstado(req, res, next) {
     }
     // SEGURIDAD C2: parsear con Zod para asegurar que activo sea boolean estricto
     const { activo } = cambiarEstadoSchema.parse(req.body);
-    const result = await usuariosService.cambiarEstadoUsuario(id, activo);
+    const result = await usuariosService.cambiarEstadoUsuario(id, activo, req.user?.sub);
     return res.status(200).json(result);
   } catch (err) {
     return next(err);

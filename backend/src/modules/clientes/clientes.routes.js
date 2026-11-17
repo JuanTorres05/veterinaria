@@ -16,6 +16,15 @@ router.post(
   clientesController.registrar
 );
 
+// POST /api/clientes/:clienteId/mascotas
+// Agregar una nueva mascota a un cliente ya existente (Admin o Recepcionista)
+router.post(
+  '/:clienteId/mascotas',
+  requireAuth,
+  requireRole('admin', 'recepcionista'),
+  clientesController.agregarMascota
+);
+
 // GET /api/clientes
 // Listar todos los clientes (todos los roles autenticados pueden ver la lista)
 router.get(

@@ -14,10 +14,12 @@ const selectCitas = `
       WHEN e.nombre_estado IN ('Cancelada', 'No asistió') THEN 'cancelada'
       ELSE LOWER(e.nombre_estado)
     END AS estado,
+    e.nombre_estado    AS estado_detalle,
     c.fecha_creacion   AS created_at,
     m.id_mascota       AS mascota_id,
     m.nombre           AS mascota_nombre,
     m.especie,
+    m.foto_url         AS mascota_foto_url,
     cl.id_cliente,
     TRIM(CONCAT(cl.nombre, ' ', IFNULL(cl.apellido, ''))) AS cliente_nombre,
     cl.telefono,
@@ -31,8 +33,12 @@ const selectCitas = `
   JOIN estados_cita e  ON e.id_estado      = c.id_estado
 `;
 
-export async function listar({ fecha, estado }) {
+export async function listar({ fecha, estado, veterinarioUsuarioId = null }) {
   const conditions = [], params = [];
+  if (veterinarioUsuarioId) {
+    conditions.push('v.id_usuario = ?');
+    params.push(veterinarioUsuarioId);
+  }
   if (fecha) {
     conditions.push('DATE(c.fecha_hora) = ?');
     params.push(fecha);
@@ -54,34 +60,54 @@ export async function listar({ fecha, estado }) {
   return rows;
 }
 
-export async function buscarSolapada(id_veterinario, fecha_hora) {
+export async function buscarSolapada(id_veterinario, fecha_hora, duracion_min = 30) {
   const [rows] = await pool.execute(
     `SELECT c.id_cita FROM citas c
      JOIN estados_cita e ON e.id_estado = c.id_estado
      WHERE c.id_veterinario = ?
        AND e.nombre_estado NOT IN ('Cancelada', 'No asistió')
-       AND c.fecha_hora = ?
+       AND c.fecha_hora < DATE_ADD(?, INTERVAL ? MINUTE)
+       AND DATE_ADD(c.fecha_hora, INTERVAL 30 MINUTE) > ?
      LIMIT 1`,
-    [id_veterinario, fecha_hora]
+    [id_veterinario, fecha_hora, Number(duracion_min) || 30, fecha_hora]
   );
   return rows[0] || null;
 }
 
-export async function crear({ mascota_id, usuario_id, fecha_hora, motivo }) {
+export async function buscarSolapadaMascota(id_mascota, fecha_hora, duracion_min = 30) {
+  const [rows] = await pool.execute(
+    `SELECT c.id_cita FROM citas c
+     JOIN estados_cita e ON e.id_estado = c.id_estado
+     WHERE c.id_mascota = ?
+       AND e.nombre_estado NOT IN ('Cancelada', 'No asistió')
+       AND c.fecha_hora < DATE_ADD(?, INTERVAL ? MINUTE)
+       AND DATE_ADD(c.fecha_hora, INTERVAL 30 MINUTE) > ?
+     LIMIT 1`,
+    [id_mascota, fecha_hora, Number(duracion_min) || 30, fecha_hora]
+  );
+  return rows[0] || null;
+}
+
+export async function crear({ mascota_id, usuario_id, usuario_registro_id = null, fecha_hora, motivo }) {
   // usuario_id que viene del frontend es el id_veterinario seleccionado
   const [result] = await pool.execute(
-    `INSERT INTO citas (id_mascota, id_veterinario, id_estado, fecha_hora, motivo)
-     VALUES (?, ?, 1, ?, ?)`,
-    [mascota_id, usuario_id, fecha_hora, motivo]
+    `INSERT INTO citas (id_mascota, id_veterinario, id_estado, id_usuario_registro, fecha_hora, motivo)
+     VALUES (?, ?, 1, ?, ?, ?)`,
+    [mascota_id, usuario_id, usuario_registro_id, fecha_hora, motivo]
   );
   return buscarPorId(result.insertId);
 }
 
 export async function actualizarEstado(id, estadoFrontend, notasCancelacion) {
-  let targetEstado = 'Programada';
-  if (estadoFrontend === 'atendida') targetEstado = 'Atendida';
-  else if (estadoFrontend === 'cancelada') targetEstado = 'Cancelada';
-  else if (estadoFrontend === 'pendiente') targetEstado = 'Programada';
+  const ESTADO_MAP = {
+    pendiente: 'Programada',
+    confirmada: 'Confirmada',
+    en_atencion: 'En atención',
+    atendida: 'Atendida',
+    cancelada: 'Cancelada',
+    no_asistio: 'No asistió',
+  };
+  const targetEstado = ESTADO_MAP[estadoFrontend] || 'Programada';
 
   const [[estadoRow]] = await pool.execute(
     'SELECT id_estado FROM estados_cita WHERE nombre_estado = ? LIMIT 1',
@@ -109,7 +135,13 @@ export async function eliminar(id) {
 export async function obtenerEstadisticas() {
   const [[{ clientes }]]     = await pool.execute('SELECT COUNT(*) AS clientes     FROM clientes     WHERE activo = 1');
   const [[{ mascotas }]]     = await pool.execute('SELECT COUNT(*) AS mascotas     FROM mascotas     WHERE activo = 1');
-  const [[{ citasHoy }]]     = await pool.execute('SELECT COUNT(*) AS citasHoy     FROM citas        WHERE DATE(fecha_hora) = CURDATE()');
+  const [[{ citasHoy }]]     = await pool.execute(
+    `SELECT COUNT(*) AS citasHoy
+     FROM citas c
+     JOIN estados_cita e ON e.id_estado = c.id_estado
+     WHERE DATE(c.fecha_hora) = CURDATE()
+       AND e.nombre_estado NOT IN ('Cancelada', 'No asistió')`
+  );
   const [[{ veterinarios }]] = await pool.execute('SELECT COUNT(*) AS veterinarios FROM veterinarios WHERE activo = 1');
   return { clientes, mascotas, citasHoy, veterinarios };
 }

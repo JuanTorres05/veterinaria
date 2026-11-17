@@ -23,8 +23,8 @@ export const crearCitaSchema = z.object({
 });
 
 export const cambiarEstadoSchema = z.object({
-  estado: z.enum(['pendiente', 'atendida', 'cancelada'], {
-    errorMap: () => ({ message: 'El estado debe ser: pendiente, atendida o cancelada' }),
+  estado: z.enum(['pendiente', 'confirmada', 'en_atencion', 'atendida', 'cancelada', 'no_asistio'], {
+    errorMap: () => ({ message: 'El estado debe ser: pendiente, confirmada, en_atencion, atendida, cancelada o no_asistio' }),
   }),
   notas_cancelacion: z.string().trim().max(500, 'Las notas de cancelación no pueden superar 500 caracteres.').optional().nullable(),
 });

@@ -1,9 +1,16 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useFeedback } from '../context/FeedbackContext';
+import { CameraCaptureModal } from '../components/PetPhotoPicker';
 import Spinner from '../components/Spinner';
 import api from '../services/api';
 import { resolveArchivoUrl, formatBytes, leerArchivosParaSubida } from '../utils/archivos';
+import {
+  imprimirHistoriaClinicaPDF,
+  descargarHistoriaClinicaPDF,
+  normalizarTelefonoWhatsApp,
+} from '../utils/historiaClinicaPrint';
 import { 
   ArrowLeft, 
   User, 
@@ -23,6 +30,7 @@ import {
   CalendarBlank,
   CheckCircle,
   UploadSimple,
+  Camera,
   FilePdf,
   Image as ImageIcon,
   Trash,
@@ -31,7 +39,9 @@ import {
   ArrowSquareOut,
   Syringe,
   Paperclip,
-  Eye
+  Eye,
+  Printer,
+  WhatsappLogo
 } from '@phosphor-icons/react';
 
 function getEspecieEmoji(especie) {
@@ -186,8 +196,49 @@ function GaleriaArchivos({ archivos = [], canEdit, onDeleteArchivo, onPreviewArc
   );
 }
 
+function ControlPaginacionHistoria({
+  total,
+  visible,
+  inicial,
+  onShowAll,
+  onShowLess,
+  labelAll = 'Mostrar toda la historia',
+}) {
+  if (total <= inicial) return null;
+  const hayMas = visible < total;
+
+  return (
+    <div className="pt-3 border-t border-slate-100 flex items-center justify-between flex-wrap gap-2">
+      <span className="text-[11px] font-medium text-slate-500 tabular-nums">
+        Mostrando {Math.min(visible, total)} de {total} registros
+      </span>
+      <div className="flex items-center gap-2 flex-wrap">
+        {hayMas && (
+          <button
+            type="button"
+            onClick={onShowAll}
+            className="px-3 py-1.5 rounded-lg bg-sky-50 hover:bg-sky-100 border border-sky-200 text-sky-800 text-xs font-semibold transition-colors"
+          >
+            {labelAll} ({total})
+          </button>
+        )}
+        {visible > inicial && (
+          <button
+            type="button"
+            onClick={onShowLess}
+            className="px-3 py-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 text-xs font-semibold transition-colors"
+          >
+            Mostrar menos
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function FichaMascotaPage() {
   const { id } = useParams();
+  const { notify, confirm } = useFeedback();
   const { user } = useAuth();
   const canEdit = user?.rol === 'veterinario' || user?.rol === 'admin';
 
@@ -196,6 +247,13 @@ export default function FichaMascotaPage() {
   const [error, setError] = useState('');
   const [feedbackMsg, setFeedbackMsg] = useState('');
   const [uploadingTarget, setUploadingTarget] = useState(null);
+  const [subiendoFoto, setSubiendoFoto] = useState(false);
+  const [camFotoOpen, setCamFotoOpen] = useState(false);
+
+  // Límites iniciales para evitar listas clínicas demasiado largas
+  const [visibleConsultas, setVisibleConsultas] = useState(3);
+  const [visibleProcs, setVisibleProcs] = useState(2);
+  const [visibleHosps, setVisibleHosps] = useState(2);
 
   // Visor Lightbox para Fotos y PDFs
   const [previewArchivo, setPreviewArchivo] = useState(null);
@@ -231,8 +289,39 @@ export default function FichaMascotaPage() {
   }, [id]);
 
   useEffect(() => {
+    setVisibleConsultas(3);
+    setVisibleProcs(2);
+    setVisibleHosps(2);
     loadMascotaDetails();
   }, [loadMascotaDetails]);
+
+  const subirArchivoFoto = async (archivo) => {
+    try {
+      setSubiendoFoto(true);
+      const { data } = await api.patch(`/mascotas/${id}/foto`, { archivo });
+      setMascota((prev) => (prev ? { ...prev, fotoUrl: data.fotoUrl } : prev));
+      showToast('Foto de perfil de la mascota actualizada.');
+    } catch (err) {
+      notify.error(err.response?.data?.message || err.message || 'No se pudo subir la foto.');
+    } finally {
+      setSubiendoFoto(false);
+    }
+  };
+
+  const handleSubirFotoMascota = async (fileList) => {
+    const file = fileList?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      notify.error('La foto de perfil debe ser una imagen (JPG, PNG, WEBP o GIF).');
+      return;
+    }
+    try {
+      const [archivo] = await leerArchivosParaSubida([file]);
+      await subirArchivoFoto(archivo);
+    } catch (err) {
+      notify.error(err.message || 'No se pudo leer la imagen.');
+    }
+  };
 
   /* ── Subir Fotos / PDFs directamente a una Consulta del Historial ── */
   const handleSubirAConsulta = async (consultaId, fileList) => {
@@ -244,7 +333,7 @@ export default function FichaMascotaPage() {
       await loadMascotaDetails(true);
       showToast(`Se adjuntaron ${archivos.length} archivo(s) a la consulta #${consultaId}.`);
     } catch (err) {
-      alert(err.response?.data?.message || err.message || 'Error al subir archivos a la consulta.');
+      notify.error(err.response?.data?.message || err.message || 'Error al subir archivos a la consulta.');
     } finally {
       setUploadingTarget(null);
     }
@@ -260,7 +349,7 @@ export default function FichaMascotaPage() {
       await loadMascotaDetails(true);
       showToast(`Se adjuntaron ${archivos.length} archivo(s) al procedimiento #${procedimientoId}.`);
     } catch (err) {
-      alert(err.response?.data?.message || err.message || 'Error al subir archivos al procedimiento.');
+      notify.error(err.response?.data?.message || err.message || 'Error al subir archivos al procedimiento.');
     } finally {
       setUploadingTarget(null);
     }
@@ -268,13 +357,19 @@ export default function FichaMascotaPage() {
 
   /* ── Eliminar Archivo Adjunto ── */
   const handleDeleteArchivo = async (archivoId, nombreArchivo) => {
-    if (!window.confirm(`¿Deseas eliminar el archivo adjunto "${nombreArchivo}"?`)) return;
+    const ok = await confirm({
+      title: 'Eliminar archivo adjunto',
+      message: `¿Deseas eliminar el archivo "${nombreArchivo}"? Esta acción no se puede deshacer.`,
+      confirmLabel: 'Eliminar',
+      tone: 'danger',
+    });
+    if (!ok) return;
     try {
       await api.delete(`/mascotas/${id}/archivos/${archivoId}`);
       await loadMascotaDetails(true);
       showToast(`Archivo "${nombreArchivo}" eliminado.`);
     } catch (err) {
-      alert(err.response?.data?.message || 'Error al eliminar el archivo.');
+      notify.error(err.response?.data?.message || 'Error al eliminar el archivo.');
     }
   };
 
@@ -355,6 +450,8 @@ export default function FichaMascotaPage() {
 
   const citasPendientes = (mascota.citas || []).filter(c => c.estado === 'pendiente');
   const procedimientos = mascota.procedimientos || [];
+  const hospitalizaciones = mascota.hospitalizaciones || [];
+  const hospActiva = hospitalizaciones.find((h) => h.estado === 'Activa') || null;
   const ultimaConsulta = mascota.historial?.[0] || null;
 
   return (
@@ -380,9 +477,58 @@ export default function FichaMascotaPage() {
 
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-3xl shadow-xs select-none">
-              {getEspecieEmoji(mascota.especie)}
+            <div className="relative group flex-shrink-0">
+              <div className="w-16 h-16 rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-3xl shadow-xs select-none overflow-hidden">
+                {mascota.fotoUrl ? (
+                  <img
+                    src={resolveArchivoUrl(mascota.fotoUrl)}
+                    alt={mascota.nombre}
+                    className="w-full h-full object-cover cursor-pointer"
+                    onClick={() =>
+                      setPreviewArchivo({
+                        nombre_archivo: `Foto de ${mascota.nombre}`,
+                        tipo_archivo: 'imagen',
+                        ruta_archivo: mascota.fotoUrl,
+                      })
+                    }
+                  />
+                ) : (
+                  getEspecieEmoji(mascota.especie)
+                )}
+              </div>
+              <div className="flex items-center gap-1 absolute -bottom-2 -right-2">
+                <button
+                  type="button"
+                  disabled={subiendoFoto}
+                  onClick={() => setCamFotoOpen(true)}
+                  title="Tomar foto con cámara"
+                  className="w-7 h-7 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white border-2 border-white flex items-center justify-center shadow-sm transition-colors"
+                >
+                  <Camera size={13} weight="bold" />
+                </button>
+                <label
+                  title={mascota.fotoUrl ? 'Subir nueva foto' : 'Subir foto de la mascota'}
+                  className="w-7 h-7 rounded-full bg-sky-700 hover:bg-sky-600 text-white border-2 border-white flex items-center justify-center cursor-pointer shadow-sm transition-colors"
+                >
+                  <UploadSimple size={13} weight="bold" />
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    disabled={subiendoFoto}
+                    onChange={(e) => {
+                      handleSubirFotoMascota(e.target.files);
+                      e.target.value = '';
+                    }}
+                    className="hidden"
+                  />
+                </label>
+              </div>
             </div>
+            <CameraCaptureModal
+              open={camFotoOpen}
+              onClose={() => setCamFotoOpen(false)}
+              onCapture={subirArchivoFoto}
+            />
             <div>
               <div className="flex items-center gap-2.5 flex-wrap">
                 <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
@@ -404,7 +550,42 @@ export default function FichaMascotaPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => {
+                const ok = imprimirHistoriaClinicaPDF(mascota);
+                if (!ok) {
+                  notify.error('Permite las ventanas emergentes en tu navegador para generar el PDF.');
+                }
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold shadow-2xs transition-colors"
+              title="Imprimir o guardar como PDF"
+            >
+              <Printer size={15} weight="bold" className="text-slate-600" />
+              <span>Imprimir / PDF</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                const tel = normalizarTelefonoWhatsApp(mascota.cliente?.telefono);
+                if (!tel) {
+                  notify.error('El propietario no tiene un teléfono registrado para WhatsApp.');
+                  return;
+                }
+                const fileName = descargarHistoriaClinicaPDF(mascota);
+                const texto = `Aquí está la historia clínica de *${mascota.nombre}* (Expediente #${mascota.id}).`;
+                window.open(`https://wa.me/${tel}?text=${encodeURIComponent(texto)}`, '_blank', 'noopener,noreferrer');
+                notify.info(`Se descargó ${fileName}. Adjunta el archivo en el chat de WhatsApp que se acaba de abrir.`);
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold shadow-2xs transition-colors"
+              title="Descargar PDF y abrir chat de WhatsApp con el mensaje"
+            >
+              <WhatsappLogo size={15} weight="fill" className="text-emerald-600" />
+              <span>WhatsApp (PDF)</span>
+            </button>
+
             {canEdit && (
               <button
                 type="button"
@@ -486,6 +667,32 @@ export default function FichaMascotaPage() {
         </div>
       </div>
 
+      {/* ── Aviso si está actualmente hospitalizado ── */}
+      {hospActiva && (
+        <div className="flex items-center justify-between flex-wrap gap-3 p-4 rounded-xl border border-sky-200 bg-sky-50 text-sky-950 shadow-2xs">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-sky-700 text-white flex items-center justify-center flex-shrink-0">
+              <FirstAid size={20} weight="bold" />
+            </div>
+            <div>
+              <p className="text-xs font-extrabold uppercase tracking-wider text-sky-800">
+                Paciente Actualmente Hospitalizado
+              </p>
+              <p className="text-xs text-sky-900 mt-0.5">
+                Ingreso: <strong>{formatDate(hospActiva.fecha_ingreso)}</strong> — Motivo: <em>&quot;{hospActiva.motivo}&quot;</em>
+              </p>
+            </div>
+          </div>
+          <Link
+            to="/hospitalizacion"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-sky-700 hover:bg-sky-600 text-white text-xs font-bold shadow-2xs transition-colors"
+          >
+            <FirstAid size={15} weight="bold" />
+            <span>Ver en Hospitalización</span>
+          </Link>
+        </div>
+      )}
+
       {/* ── Aviso si tiene Cita Pendiente por Atender ── */}
       {citasPendientes.length > 0 && (
         <div className="flex items-center justify-between flex-wrap gap-3 p-4 rounded-2xl border border-amber-200 bg-amber-50/90 text-amber-950 shadow-xs">
@@ -518,86 +725,95 @@ export default function FichaMascotaPage() {
         <div className="w-full lg:w-[65%] space-y-6">
           
           {/* 1. SECCIÓN: HISTORIA CLÍNICA Y EVOLUCIÓN MÉDICA (consultas_medicas) */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-5">
-            <div className="flex items-center justify-between flex-wrap gap-2 border-b border-slate-100 pb-4">
+          <section className="bg-white border border-slate-200 rounded-xl p-6 shadow-2xs space-y-6">
+            <div className="flex items-start justify-between flex-wrap gap-3 border-b border-slate-200 pb-4">
               <div>
-                <h2 className="text-sm font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2 select-none">
-                  <Notebook size={19} className="text-sky-600" />
-                  <span>Historia Clínica y Evolución Médica ({mascota.historial.length})</span>
+                <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2 select-none">
+                  <Notebook size={18} className="text-slate-700" weight="duotone" />
+                  <span>Historia Clínica y Evolución Médica</span>
+                  <span className="text-xs font-semibold text-slate-400 tabular-nums">
+                    ({mascota.historial.length})
+                  </span>
                 </h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Consultas médicas originadas en la atención de citas. Puedes adjuntar fotos clínicas y reportes en PDF a cada consulta.
+                <p className="text-xs text-slate-500 mt-1">
+                  Registro cronológico de atenciones médicas, diagnósticos, prescripciones y soportes clínicos.
                 </p>
               </div>
-              <span className="text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-1 rounded-full bg-sky-50 text-sky-800 border border-sky-200">
-                Consultas Médicas
-              </span>
             </div>
 
             {mascota.historial.length === 0 ? (
-              <div className="text-center py-10 px-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 space-y-3">
-                <div className="w-12 h-12 rounded-2xl bg-sky-50 border border-sky-200 text-sky-600 flex items-center justify-center mx-auto">
-                  <Stethoscope size={24} weight="bold" />
+              <div className="text-center py-10 px-6 rounded-xl border border-dashed border-slate-200 bg-slate-50/50 space-y-3">
+                <div className="w-11 h-11 rounded-xl bg-slate-100 border border-slate-200 text-slate-600 flex items-center justify-center mx-auto">
+                  <Stethoscope size={22} weight="bold" />
                 </div>
                 <div>
-                  <p className="font-bold text-sm text-slate-800">
+                  <p className="font-semibold text-sm text-slate-800">
                     Sin consultas médicas registradas para {mascota.nombre}
                   </p>
                   <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-                    Las consultas se registran cuando el veterinario selecciona <strong>"Atender Cita"</strong> desde la Agenda Diaria o el Monitoreo en Vivo.
+                    Las consultas se registran cuando el veterinario selecciona <strong>&quot;Atender Cita&quot;</strong> desde la Agenda Diaria o el Monitoreo en Vivo.
                   </p>
                 </div>
               </div>
             ) : (
-              <div className="relative border-l-2 border-sky-200 ml-3 pl-6 space-y-6">
-                {mascota.historial.map((h, index) => {
+              <>
+                <div className="relative border-l border-slate-200 ml-2.5 pl-6 space-y-6">
+                {mascota.historial.slice(0, visibleConsultas).map((h, index) => {
                   const isUploadingThis = uploadingTarget === `consulta-${h.id}`;
+                  const isLatest = index === 0;
                   return (
-                    <div key={h.id} className="relative group">
-                      
+                    <article key={h.id} className="relative group">
                       {/* Indicador de Línea de Tiempo */}
-                      <span className="absolute -left-[31px] top-2 w-3.5 h-3.5 rounded-full bg-white border-2 border-sky-600 group-hover:scale-110 transition-transform" />
+                      <span
+                        className={`absolute -left-[29px] top-5 w-2.5 h-2.5 rounded-full border-2 transition-colors ${
+                          isLatest
+                            ? 'bg-sky-700 border-sky-700 ring-4 ring-sky-50'
+                            : 'bg-white border-slate-300 group-hover:border-slate-500'
+                        }`}
+                      />
 
-                      {/* Tarjeta de Consulta Clínica */}
-                      <div className="p-5 rounded-2xl border border-slate-200 bg-slate-50/60 space-y-3.5 shadow-2xs hover:border-sky-300 transition-all">
-                        <div className="flex justify-between items-start flex-wrap gap-2 pb-2.5 border-b border-slate-200/80">
+                      {/* Registro Clínico */}
+                      <div className="bg-white rounded-xl border border-slate-200 hover:border-slate-300 transition-colors overflow-hidden">
+                        {/* Cabecera del Registro */}
+                        <div className="px-5 py-3.5 bg-slate-50/70 border-b border-slate-200/80 flex justify-between items-center flex-wrap gap-3">
                           <div className="space-y-0.5">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <span className="px-2 py-0.5 rounded-md bg-sky-100 text-sky-800 text-[10px] font-extrabold uppercase tracking-wider">
-                                Consulta #{h.id}
-                              </span>
-                              {h.cita_id && (
-                                <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-bold">
-                                  Cita #{h.cita_id}
-                                </span>
-                              )}
-                              {index === 0 && (
-                                <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 text-[10px] font-bold">
-                                  Más reciente
+                              <time className="font-bold text-sm text-slate-900">
+                                {formatDate(h.fecha)}
+                              </time>
+                              {isLatest && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm bg-sky-50 text-sky-800 border border-sky-200/80 text-[10px] font-bold uppercase tracking-wider">
+                                  Última atención
                                 </span>
                               )}
                             </div>
-                            <p className="font-extrabold text-xs text-slate-900 pt-1">
-                              {formatDate(h.fecha)}
-                            </p>
+                            <div className="flex items-center gap-2 text-[11px] font-medium text-slate-500 tabular-nums">
+                              <span>Consulta #{h.id}</span>
+                              {h.cita_id && (
+                                <>
+                                  <span className="text-slate-300">•</span>
+                                  <span>Cita #{h.cita_id}</span>
+                                </>
+                              )}
+                            </div>
                           </div>
 
-                          {/* Profesional + Botón Subir Foto/PDF */}
-                          <div className="flex items-center gap-3 flex-wrap">
+                          {/* Profesional + Acción de Adjuntar */}
+                          <div className="flex items-center gap-4 flex-wrap">
                             <div className="text-right">
-                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                                Médico Veterinario
+                              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block">
+                                Médico Tratante
                               </span>
-                              <p className="font-bold text-xs text-sky-700 flex items-center justify-end gap-1 mt-0.5">
-                                <Stethoscope size={14} weight="bold" />
+                              <p className="font-semibold text-xs text-slate-800 flex items-center justify-end gap-1.5 mt-0.5">
+                                <Stethoscope size={14} weight="bold" className="text-sky-700" />
                                 <span>{formatVetNombre(h.veterinario_nombre)}</span>
                               </p>
                             </div>
 
                             {canEdit && (
-                              <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-sky-200 bg-sky-50 hover:bg-sky-100 text-sky-700 text-[11px] font-extrabold transition-all shadow-2xs">
-                                <UploadSimple size={14} weight="bold" />
-                                <span>{isUploadingThis ? 'Subiendo...' : 'Subir Foto / PDF'}</span>
+                              <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-slate-700 text-[11px] font-semibold transition-colors shadow-2xs">
+                                <UploadSimple size={14} weight="bold" className="text-slate-500" />
+                                <span>{isUploadingThis ? 'Subiendo...' : 'Adjuntar Foto / PDF'}</span>
                                 <input
                                   type="file"
                                   multiple
@@ -614,73 +830,131 @@ export default function FichaMascotaPage() {
                           </div>
                         </div>
 
-                        <div className="space-y-3">
+                        {/* Cuerpo Clínico con Jerarquía Editorial */}
+                        <div className="p-5 space-y-4">
+                          {/* Síntomas / Motivo */}
                           <div>
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
-                              Síntomas / Motivo de Consulta
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                              Motivo de consulta / Síntomas
                             </span>
-                            <p className="text-xs text-slate-900 font-semibold bg-white px-3 py-2 rounded-xl border border-slate-200">
+                            <p className="text-sm font-semibold text-slate-900 leading-snug">
                               {h.motivo}
                             </p>
                           </div>
-                          
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+
+                          {/* Diagnóstico y Prescripción */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-3.5 border-t border-slate-100">
                             <div>
-                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
-                                Diagnóstico Médico
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1.5">
+                                Diagnóstico médico
                               </span>
-                              <p className="text-xs text-slate-800 bg-white p-3 rounded-xl border border-slate-200 leading-relaxed font-medium h-full">
+                              <p className="text-[13px] text-slate-700 leading-relaxed whitespace-pre-line">
                                 {h.diagnostico}
                               </p>
                             </div>
-                            
-                            <div>
-                              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 block mb-1 flex items-center gap-1">
-                                <Prescription size={13} weight="bold" className="text-emerald-600" />
-                                Tratamiento y Prescripción
+
+                            <div className="border-l-2 border-emerald-600 pl-3.5">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 mb-1.5 flex items-center gap-1.5">
+                                <Prescription size={13} weight="bold" className="text-emerald-700" />
+                                Tratamiento y prescripción
                               </span>
-                              <p className="text-xs text-emerald-950 bg-emerald-50/80 p-3 rounded-xl border border-emerald-200 leading-relaxed font-medium h-full">
+                              <p className="text-[13px] text-slate-800 leading-relaxed font-medium whitespace-pre-line">
                                 {h.tratamiento}
                               </p>
                             </div>
                           </div>
 
+                          {/* Observaciones / Evolución */}
                           {h.notas && (
-                            <div className="bg-amber-50/70 p-3 rounded-xl border border-amber-200 text-xs text-amber-950">
-                              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 block mb-0.5">
-                                Observaciones Clínicas / Evolución
+                            <div className="pt-3 border-t border-slate-100">
+                              <div className="border-l-2 border-amber-400 pl-3.5 py-0.5">
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
+                                  Observaciones clínicas / Evolución
+                                </span>
+                                <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line">
+                                  {h.notas}
+                                </p>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Recetas / Medicamentos Formulados */}
+                          {h.recetas && h.recetas.length > 0 && (
+                            <div className="pt-3 border-t border-slate-100 space-y-2">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                                Receta médica y medicamentos formulados
                               </span>
-                              <p className="leading-relaxed">{h.notas}</p>
+                              <div className="space-y-2">
+                                {h.recetas.map((rec) => (
+                                  <div key={rec.id} className="border-l-2 border-sky-600 pl-3.5 py-0.5 space-y-1">
+                                    {rec.medicamentos?.map((med) => (
+                                      <div key={med.id} className="text-xs text-slate-800">
+                                        <span className="font-bold text-slate-900">{med.nombre}</span>
+                                        {med.presentacion && (
+                                          <span className="text-slate-500"> ({med.presentacion})</span>
+                                        )}
+                                        <span className="text-slate-600">
+                                          {' '}— {med.dosis}
+                                          {med.frecuencia ? ` • ${med.frecuencia}` : ''}
+                                          {med.duracion ? ` • ${med.duracion}` : ''}
+                                        </span>
+                                        {med.instrucciones && (
+                                          <p className="text-[11px] text-slate-500 mt-0.5">{med.instrucciones}</p>
+                                        )}
+                                      </div>
+                                    ))}
+                                    {rec.indicaciones_generales && (
+                                      <p className="text-[11px] text-slate-500 italic">{rec.indicaciones_generales}</p>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
                             </div>
                           )}
 
                           {/* Galería de Fotos y PDFs de la Consulta */}
-                          <GaleriaArchivos
-                            archivos={h.archivos}
-                            canEdit={canEdit}
-                            onDeleteArchivo={handleDeleteArchivo}
-                            onPreviewArchivo={setPreviewArchivo}
-                          />
+                          {h.archivos && h.archivos.length > 0 && (
+                            <div className="pt-3 border-t border-slate-100">
+                              <GaleriaArchivos
+                                archivos={h.archivos}
+                                canEdit={canEdit}
+                                onDeleteArchivo={handleDeleteArchivo}
+                                onPreviewArchivo={setPreviewArchivo}
+                              />
+                            </div>
+                          )}
                         </div>
                       </div>
-
-                    </div>
+                    </article>
                   );
                 })}
               </div>
+              <ControlPaginacionHistoria
+                total={mascota.historial.length}
+                visible={visibleConsultas}
+                inicial={3}
+                onLoadMore={() => setVisibleConsultas((v) => v + 5)}
+                onShowAll={() => setVisibleConsultas(mascota.historial.length)}
+                onShowLess={() => setVisibleConsultas(3)}
+                labelAll="Mostrar toda la historia"
+              />
+            </>
             )}
-          </div>
+          </section>
 
           {/* 2. SECCIÓN: PROCEDIMIENTOS CLÍNICOS Y SOPORTES DIAGNÓSTICOS (procedimientos + archivos_procedimiento) */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-5">
-            <div className="flex items-center justify-between flex-wrap gap-3 border-b border-slate-100 pb-4">
+          <section className="bg-white border border-slate-200 rounded-xl p-6 shadow-2xs space-y-5">
+            <div className="flex items-center justify-between flex-wrap gap-3 border-b border-slate-200 pb-4">
               <div>
-                <h2 className="text-sm font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2 select-none">
-                  <Syringe size={19} className="text-emerald-600" />
-                  <span>Procedimientos Clínicos y Exámenes ({procedimientos.length})</span>
+                <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2 select-none">
+                  <Syringe size={18} className="text-emerald-700" weight="duotone" />
+                  <span>Procedimientos Clínicos y Exámenes</span>
+                  <span className="text-xs font-semibold text-slate-400 tabular-nums">
+                    ({procedimientos.length})
+                  </span>
                 </h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Cirugías, radiografías, ecografías, laboratorios y documentos PDF o fotografías de soporte (`archivos_procedimiento`).
+                <p className="text-xs text-slate-500 mt-1">
+                  Cirugías, radiografías, ecografías, laboratorios y documentos PDF o fotografías de soporte.
                 </p>
               </div>
 
@@ -688,7 +962,7 @@ export default function FichaMascotaPage() {
                 <button
                   type="button"
                   onClick={() => setModalProcOpen(true)}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold shadow-xs transition-all active:scale-95">
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-semibold shadow-2xs transition-colors active:scale-95">
                   <Plus size={15} weight="bold" />
                   <span>Nuevo Procedimiento</span>
                 </button>
@@ -696,12 +970,12 @@ export default function FichaMascotaPage() {
             </div>
 
             {procedimientos.length === 0 ? (
-              <div className="text-center py-10 px-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 space-y-3">
-                <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center mx-auto">
-                  <Syringe size={24} weight="bold" />
+              <div className="text-center py-10 px-6 rounded-xl border border-dashed border-slate-200 bg-slate-50/50 space-y-3">
+                <div className="w-11 h-11 rounded-xl bg-slate-100 border border-slate-200 text-emerald-700 flex items-center justify-center mx-auto">
+                  <Syringe size={22} weight="bold" />
                 </div>
                 <div>
-                  <p className="font-bold text-sm text-slate-800">
+                  <p className="font-semibold text-sm text-slate-800">
                     No hay procedimientos ni exámenes registrados
                   </p>
                   <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
@@ -711,45 +985,45 @@ export default function FichaMascotaPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                {procedimientos.map((proc) => {
+                {procedimientos.slice(0, visibleProcs).map((proc) => {
                   const isUploadingProc = uploadingTarget === `proc-${proc.id}`;
                   return (
-                    <div
+                    <article
                       key={proc.id}
-                      className="p-5 rounded-2xl border border-slate-200 bg-slate-50/60 space-y-3 shadow-2xs hover:border-emerald-300 transition-all">
-                      <div className="flex items-start justify-between flex-wrap gap-2 pb-2.5 border-b border-slate-200/80">
-                        <div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="px-2.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-extrabold uppercase tracking-wider">
-                              Procedimiento #{proc.id}
-                            </span>
-                            {proc.consulta_id && (
-                              <span className="px-2 py-0.5 rounded-md bg-sky-100 text-sky-800 text-[10px] font-bold">
-                                Vinculado a Consulta #{proc.consulta_id}
-                              </span>
-                            )}
-                            <span className="text-xs text-slate-500 font-semibold">
-                              • {formatDate(proc.fecha)}
-                            </span>
-                          </div>
-                          <h3 className="font-extrabold text-sm text-slate-900 mt-1">
+                      className="rounded-xl border border-slate-200 bg-white hover:border-slate-300 transition-colors overflow-hidden">
+                      <div className="px-5 py-3.5 bg-slate-50/70 border-b border-slate-200/80 flex items-center justify-between flex-wrap gap-3">
+                        <div className="space-y-0.5">
+                          <h3 className="font-bold text-sm text-slate-900">
                             {proc.tipo_procedimiento}
                           </h3>
+                          <div className="flex items-center gap-2 text-[11px] font-medium text-slate-500 flex-wrap tabular-nums">
+                            <span>{formatDate(proc.fecha)}</span>
+                            <span className="text-slate-300">•</span>
+                            <span>Procedimiento #{proc.id}</span>
+                            {proc.consulta_id && (
+                              <>
+                                <span className="text-slate-300">•</span>
+                                <span className="text-sky-700 font-semibold">
+                                  Consulta #{proc.consulta_id}
+                                </span>
+                              </>
+                            )}
+                          </div>
                         </div>
 
-                        <div className="flex items-center gap-3 flex-wrap">
+                        <div className="flex items-center gap-4 flex-wrap">
                           <div className="text-right">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block">
                               Realizado por
                             </span>
-                            <p className="font-bold text-xs text-emerald-700">
+                            <p className="font-semibold text-xs text-slate-800 mt-0.5">
                               {formatVetNombre(proc.veterinario_nombre)}
                             </p>
                           </div>
 
                           {canEdit && (
-                            <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-[11px] font-extrabold transition-all shadow-2xs">
-                              <UploadSimple size={14} weight="bold" />
+                            <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-slate-700 text-[11px] font-semibold transition-colors shadow-2xs">
+                              <UploadSimple size={14} weight="bold" className="text-slate-500" />
                               <span>{isUploadingProc ? 'Subiendo...' : 'Adjuntar Foto / PDF'}</span>
                               <input
                                 type="file"
@@ -767,39 +1041,176 @@ export default function FichaMascotaPage() {
                         </div>
                       </div>
 
-                      {proc.descripcion && (
-                        <div>
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
-                            Descripción del Procedimiento / Hallazgos
-                          </span>
-                          <p className="text-xs text-slate-800 bg-white p-3 rounded-xl border border-slate-200 leading-relaxed font-medium">
-                            {proc.descripcion}
-                          </p>
-                        </div>
-                      )}
+                      <div className="p-5 space-y-4">
+                        {proc.descripcion && (
+                          <div>
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1.5">
+                              Descripción del procedimiento / Hallazgos
+                            </span>
+                            <p className="text-[13px] text-slate-700 leading-relaxed whitespace-pre-line">
+                              {proc.descripcion}
+                            </p>
+                          </div>
+                        )}
 
-                      {proc.observaciones && (
-                        <div className="bg-amber-50/70 p-2.5 rounded-xl border border-amber-200 text-xs text-amber-950">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 block mb-0.5">
-                            Observaciones
-                          </span>
-                          <p>{proc.observaciones}</p>
-                        </div>
-                      )}
+                        {proc.observaciones && (
+                          <div className="pt-3 border-t border-slate-100">
+                            <div className="border-l-2 border-amber-400 pl-3.5 py-0.5">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
+                                Observaciones
+                              </span>
+                              <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line">
+                                {proc.observaciones}
+                              </p>
+                            </div>
+                          </div>
+                        )}
 
-                      {/* Galería de Archivos del Procedimiento */}
-                      <GaleriaArchivos
-                        archivos={proc.archivos}
-                        canEdit={canEdit}
-                        onDeleteArchivo={handleDeleteArchivo}
-                        onPreviewArchivo={setPreviewArchivo}
-                      />
-                    </div>
+                        {/* Galería de Archivos del Procedimiento */}
+                        {proc.archivos && proc.archivos.length > 0 && (
+                          <div className="pt-3 border-t border-slate-100">
+                            <GaleriaArchivos
+                              archivos={proc.archivos}
+                              canEdit={canEdit}
+                              onDeleteArchivo={handleDeleteArchivo}
+                              onPreviewArchivo={setPreviewArchivo}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </article>
                   );
                 })}
+              <ControlPaginacionHistoria
+                total={procedimientos.length}
+                visible={visibleProcs}
+                inicial={2}
+                onLoadMore={() => setVisibleProcs((v) => v + 5)}
+                onShowAll={() => setVisibleProcs(procedimientos.length)}
+                onShowLess={() => setVisibleProcs(2)}
+                labelAll="Mostrar todos"
+              />
               </div>
             )}
-          </div>
+          </section>
+
+          {/* 3. SECCIÓN: HOSPITALIZACIONES E INTERNACIONES */}
+          <section className="bg-white border border-slate-200 rounded-xl p-6 shadow-2xs space-y-5">
+            <div className="flex items-center justify-between flex-wrap gap-3 border-b border-slate-200 pb-4">
+              <div>
+                <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2 select-none">
+                  <FirstAid size={18} className="text-sky-700" weight="duotone" />
+                  <span>Hospitalizaciones e Internaciones</span>
+                  <span className="text-xs font-semibold text-slate-400 tabular-nums">
+                    ({hospitalizaciones.length})
+                  </span>
+                </h2>
+                <p className="text-xs text-slate-500 mt-1">
+                  Historial completo de ingresos hospitalarios, tratamientos aplicados y egresos.
+                </p>
+              </div>
+              <Link
+                to="/hospitalizacion"
+                className="text-xs font-semibold text-sky-700 hover:text-sky-800 hover:underline"
+              >
+                Ir a Hospitalización →
+              </Link>
+            </div>
+
+            {hospitalizaciones.length === 0 ? (
+              <div className="text-center py-8 px-6 rounded-xl border border-dashed border-slate-200 bg-slate-50/50">
+                <p className="font-semibold text-sm text-slate-700">
+                  Sin hospitalizaciones registradas para {mascota.nombre}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {hospitalizaciones.slice(0, visibleHosps).map((hosp) => {
+                  const esActiva = hosp.estado === 'Activa';
+                  return (
+                    <article
+                      key={hosp.id}
+                      className={`rounded-xl border overflow-hidden ${
+                        esActiva ? 'border-sky-300 bg-white' : 'border-slate-200 bg-white'
+                      }`}
+                    >
+                      <div className="px-5 py-3 bg-slate-50/70 border-b border-slate-200/80 flex items-center justify-between flex-wrap gap-2">
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-sm text-slate-900">
+                              Ingreso: {formatDate(hosp.fecha_ingreso)}
+                            </span>
+                            <span
+                              className={`px-2 py-0.5 rounded-sm text-[10px] font-bold uppercase tracking-wider ${
+                                esActiva
+                                  ? 'bg-sky-100 text-sky-800 border border-sky-200'
+                                  : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              }`}
+                            >
+                              {esActiva ? 'Internado' : hosp.estado}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-500">
+                            {hosp.fecha_egreso ? `Egreso: ${formatDate(hosp.fecha_egreso)}` : 'Estancia en curso'}
+                            {hosp.consulta_id ? ` • Consulta #${hosp.consulta_id}` : ''}
+                          </p>
+                        </div>
+
+                        <div className="text-right">
+                          <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block">
+                            Médico Responsable
+                          </span>
+                          <p className="font-semibold text-xs text-slate-800">
+                            {formatVetNombre(hosp.veterinario_nombre)}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="p-5 space-y-3">
+                        <div>
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                            Motivo de internación
+                          </span>
+                          <p className="text-sm font-semibold text-slate-900">{hosp.motivo}</p>
+                        </div>
+
+                        {hosp.tratamientos_realizados && (
+                          <div className="border-l-2 border-emerald-600 pl-3.5">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 block mb-1">
+                              Tratamientos aplicados
+                            </span>
+                            <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-line">
+                              {hosp.tratamientos_realizados}
+                            </p>
+                          </div>
+                        )}
+
+                        {hosp.observaciones && (
+                          <div className="border-l-2 border-amber-400 pl-3.5">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
+                              Observaciones / Evolución
+                            </span>
+                            <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line">
+                              {hosp.observaciones}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </article>
+                  );
+                })}
+              <ControlPaginacionHistoria
+                total={hospitalizaciones.length}
+                visible={visibleHosps}
+                inicial={2}
+                onLoadMore={() => setVisibleHosps((v) => v + 5)}
+                onShowAll={() => setVisibleHosps(hospitalizaciones.length)}
+                onShowLess={() => setVisibleHosps(2)}
+                labelAll="Mostrar todas"
+              />
+              </div>
+            )}
+          </section>
 
         </div>
 

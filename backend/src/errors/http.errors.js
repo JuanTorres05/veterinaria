@@ -10,6 +10,15 @@ export class HttpError extends Error {
 }
 
 /**
+ * 400 Bad Request — datos o precondiciones de negocio inválidas.
+ */
+export class BadRequestError extends HttpError {
+  constructor(message = 'Solicitud inválida.') {
+    super(400, message);
+  }
+}
+
+/**
  * 401 Unauthorized — credenciales inválidas o token ausente.
  */
 export class UnauthorizedError extends HttpError {

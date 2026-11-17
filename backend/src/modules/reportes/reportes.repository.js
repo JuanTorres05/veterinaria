@@ -8,7 +8,7 @@ export async function obtenerResumen() {
   const [[{ citasPendientes }]] = await pool.execute("SELECT COUNT(*) AS citasPendientes FROM citas c JOIN estados_cita e ON e.id_estado = c.id_estado WHERE e.nombre_estado IN ('Programada','Confirmada')");
   const [[{ citasCanceladas }]] = await pool.execute("SELECT COUNT(*) AS citasCanceladas FROM citas c JOIN estados_cita e ON e.id_estado = c.id_estado WHERE e.nombre_estado = 'Cancelada'");
   const [[{ totalHistorial }]]  = await pool.execute('SELECT COUNT(*) AS totalHistorial FROM historias_clinicas');
-  const [topEspecies] = await pool.execute('SELECT especie, COUNT(*) AS total FROM mascotas GROUP BY especie ORDER BY total DESC LIMIT 5');
+  const [topEspecies] = await pool.execute('SELECT especie, COUNT(*) AS total FROM mascotas WHERE activo = 1 GROUP BY especie ORDER BY total DESC LIMIT 5');
   const [topVet] = await pool.execute(`
     SELECT u.nombre AS veterinario, COUNT(*) AS totalAtendidas
     FROM citas c

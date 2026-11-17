@@ -29,8 +29,19 @@ async function asegurarUsuarioExiste(id) {
   if (!await usuariosRepository.existe(id)) throw new NotFoundError('Trabajador no encontrado.');
 }
 
-export async function cambiarEstadoUsuario(id, activo) {
+export async function cambiarEstadoUsuario(id, activo, actorId = null) {
   await asegurarUsuarioExiste(id);
+  if (!activo && actorId && Number(id) === Number(actorId)) {
+    throw new ConflictError('No puedes desactivar tu propia cuenta mientras tienes la sesión activa.');
+  }
+  if (!activo) {
+    const citasFuturas = await usuariosRepository.contarCitasFuturasPendientes(id);
+    if (citasFuturas > 0) {
+      throw new ConflictError(
+        `No se puede desactivar al profesional porque tiene ${citasFuturas} cita(s) futura(s) pendiente(s). Reasigna o cancela sus citas primero.`
+      );
+    }
+  }
   await usuariosRepository.actualizarEstado(id, activo);
   return { message: `Estado del usuario actualizado a ${activo ? 'activo' : 'inactivo'}.` };
 }

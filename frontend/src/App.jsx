@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { FeedbackProvider } from './context/FeedbackContext';
 import PrivateRoute from './components/PrivateRoute';
 import Layout from './components/Layout';
 import LoginPage from './pages/LoginPage';
@@ -11,12 +12,14 @@ import FichaMascotaPage from './pages/FichaMascotaPage';
 import UnauthorizedPage from './pages/UnauthorizedPage';
 import ReportesPage from './pages/ReportesPage';
 import MonitoreoPage from './pages/MonitoreoPage';
+import HospitalizacionPage from './pages/HospitalizacionPage';
 import UsuariosPage from './pages/UsuariosPage';
 
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
+      <FeedbackProvider>
+        <BrowserRouter>
         <Routes>
           {/* Pública */}
           <Route path="/login" element={<LoginPage />} />
@@ -34,6 +37,7 @@ export default function App() {
             <Route path="/agenda" element={<AgendaPage />} />
             <Route path="/pacientes" element={<PacientesPage />} />
             <Route path="/monitoreo" element={<MonitoreoPage />} />
+            <Route path="/hospitalizacion" element={<HospitalizacionPage />} />
             <Route path="/mascotas/:id" element={<FichaMascotaPage />} />
             <Route
               path="/registrar"
@@ -70,6 +74,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </BrowserRouter>
+      </FeedbackProvider>
     </AuthProvider>
   );
 }

@@ -4,10 +4,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import pool from '../../db/pool.js';
+import { BadRequestError, ConflictError } from '../../errors/http.errors.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const UPLOADS_DIR = path.resolve(__dirname, '../../../uploads/procedimientos');
+const UPLOADS_MASCOTAS_DIR = path.resolve(__dirname, '../../../uploads/mascotas');
 
 const TIPO_SOPORTE_CONSULTA = 'Soporte Multimedia de Consulta';
 
@@ -111,7 +113,7 @@ async function insertarArchivosEnProcedimiento(procedimientoId, usuarioId, archi
 
 async function resolverIdVeterinario(usuarioId, citaId = null) {
   let [[vet]] = await pool.execute(
-    'SELECT id_veterinario FROM veterinarios WHERE id_usuario = ? LIMIT 1',
+    'SELECT id_veterinario FROM veterinarios WHERE id_usuario = ? AND activo = 1 LIMIT 1',
     [usuarioId]
   );
   if (!vet && citaId) {
@@ -121,9 +123,18 @@ async function resolverIdVeterinario(usuarioId, citaId = null) {
     );
   }
   if (!vet) {
-    [[vet]] = await pool.execute('SELECT id_veterinario FROM veterinarios WHERE activo = 1 LIMIT 1');
+    throw new BadRequestError(
+      'Solo un profesional veterinario activo (o una cita con veterinario asignado) puede registrar este acto clínico.'
+    );
   }
-  return vet ? vet.id_veterinario : 1;
+  return vet.id_veterinario;
+}
+
+export async function listarMedicamentos() {
+  const [rows] = await pool.execute(
+    'SELECT id_medicamento AS id, nombre, presentacion, concentracion FROM medicamentos WHERE activo = 1 ORDER BY nombre ASC'
+  );
+  return rows;
 }
 
 export async function listarPorCliente(clienteId) {
@@ -139,7 +150,8 @@ export async function listarPorCliente(clienteId) {
       peso AS peso_kg, 
       color, 
       microchip, 
-      observaciones
+      observaciones,
+      foto_url AS fotoUrl
     FROM mascotas 
     WHERE id_cliente = ? AND activo = 1 
     ORDER BY nombre ASC
@@ -160,6 +172,7 @@ export async function buscarFicha(id) {
       m.color, 
       m.microchip, 
       m.observaciones, 
+      m.foto_url,
       c.id_cliente AS cliente_id, 
       TRIM(CONCAT(c.nombre, ' ', IFNULL(c.apellido, ''))) AS cliente_nombre, 
       c.cedula AS cliente_cedula, 
@@ -229,10 +242,87 @@ export async function listarHistorial(mascotaId) {
     archivosPorConsulta.get(arch.consulta_id).push(arch);
   }
 
+  // Obtener recetas médicas y medicamentos formulados en estas consultas
+  const [recetasRows] = await pool.execute(
+    `SELECT
+      r.id_receta AS id,
+      r.id_consulta AS consulta_id,
+      r.fecha_emision,
+      r.indicaciones_generales,
+      r.estado,
+      dr.id_detalle,
+      med.nombre AS medicamento_nombre,
+      med.presentacion,
+      med.concentracion,
+      dr.dosis,
+      dr.frecuencia,
+      dr.duracion,
+      dr.instrucciones
+    FROM recetas_medicas r
+    LEFT JOIN detalle_receta dr ON dr.id_receta = r.id_receta
+    LEFT JOIN medicamentos med ON med.id_medicamento = dr.id_medicamento
+    WHERE r.id_consulta IN (${placeholders})
+    ORDER BY r.fecha_emision DESC, dr.id_detalle ASC`,
+    consultaIds
+  );
+
+  const recetasPorConsulta = new Map();
+  for (const row of recetasRows) {
+    if (!recetasPorConsulta.has(row.consulta_id)) {
+      recetasPorConsulta.set(row.consulta_id, new Map());
+    }
+    const mapRec = recetasPorConsulta.get(row.consulta_id);
+    if (!mapRec.has(row.id)) {
+      mapRec.set(row.id, {
+        id: row.id,
+        fecha_emision: row.fecha_emision,
+        indicaciones_generales: row.indicaciones_generales,
+        estado: row.estado,
+        medicamentos: [],
+      });
+    }
+    if (row.id_detalle) {
+      mapRec.get(row.id).medicamentos.push({
+        id: row.id_detalle,
+        nombre: row.medicamento_nombre,
+        presentacion: row.presentacion,
+        concentracion: row.concentracion,
+        dosis: row.dosis,
+        frecuencia: row.frecuencia,
+        duracion: row.duracion,
+        instrucciones: row.instrucciones,
+      });
+    }
+  }
+
   return rows.map((r) => ({
     ...r,
     archivos: archivosPorConsulta.get(r.id) || [],
+    recetas: recetasPorConsulta.has(r.id) ? Array.from(recetasPorConsulta.get(r.id).values()) : [],
   }));
+}
+
+export async function listarHospitalizaciones(mascotaId) {
+  const [rows] = await pool.execute(
+    `SELECT
+      h.id_hospitalizacion AS id,
+      h.id_consulta AS consulta_id,
+      h.fecha_ingreso,
+      h.fecha_egreso,
+      h.motivo,
+      h.tratamientos_realizados,
+      h.observaciones,
+      h.estado,
+      u.nombre AS veterinario_nombre
+    FROM hospitalizaciones h
+    INNER JOIN veterinarios v ON v.id_veterinario = h.id_veterinario
+    INNER JOIN usuarios u ON u.id_usuario = v.id_usuario
+    WHERE h.id_mascota = ?
+      AND h.motivo <> 'Atención y soporte diagnóstico de consulta'
+    ORDER BY FIELD(h.estado, 'Activa', 'Finalizada', 'Cancelada'), h.fecha_ingreso DESC`,
+    [mascotaId]
+  );
+  return rows;
 }
 
 export async function listarProcedimientos(mascotaId) {
@@ -438,6 +528,41 @@ export async function subirArchivosProcedimiento({ procedimiento_id, usuario_id,
   return insertarArchivosEnProcedimiento(procedimiento_id, usuario_id, archivos);
 }
 
+export async function guardarFotoMascotaEnDisco(mascotaId, archivo) {
+  await fs.mkdir(UPLOADS_MASCOTAS_DIR, { recursive: true });
+  const rawBase64 = archivo.base64_data.includes(',')
+    ? archivo.base64_data.split(',')[1]
+    : archivo.base64_data;
+  const buffer = Buffer.from(rawBase64, 'base64');
+
+  const safeOriginal = (archivo.nombre_archivo || 'mascota.jpg')
+    .replace(/[^a-zA-Z0-9._-]/g, '_')
+    .slice(-80);
+  const uniqueName = `${mascotaId}-${Date.now()}-${randomUUID().slice(0, 6)}-${safeOriginal}`;
+  await fs.writeFile(path.join(UPLOADS_MASCOTAS_DIR, uniqueName), buffer);
+
+  return `/uploads/mascotas/${uniqueName}`;
+}
+
+export async function actualizarFotoMascota({ mascota_id, archivo }) {
+  const [[actual]] = await pool.execute(
+    'SELECT id_mascota, foto_url FROM mascotas WHERE id_mascota = ? LIMIT 1',
+    [mascota_id]
+  );
+  if (!actual) return null;
+
+  const nuevaRuta = await guardarFotoMascotaEnDisco(mascota_id, archivo);
+  await pool.execute('UPDATE mascotas SET foto_url = ? WHERE id_mascota = ?', [nuevaRuta, mascota_id]);
+
+  // Borrar foto anterior si existía
+  if (actual.foto_url && actual.foto_url.startsWith('/uploads/mascotas/')) {
+    const oldFile = path.basename(actual.foto_url);
+    await fs.unlink(path.join(UPLOADS_MASCOTAS_DIR, oldFile)).catch(() => {});
+  }
+
+  return { fotoUrl: nuevaRuta };
+}
+
 export async function eliminarArchivo({ archivo_id }) {
   const [[arch]] = await pool.execute(
     'SELECT id_archivo, ruta_archivo FROM archivos_procedimiento WHERE id_archivo = ? LIMIT 1',
@@ -466,6 +591,9 @@ export async function crearHistorial({
   diagnostico,
   tratamiento,
   notas,
+  requiere_hospitalizacion = false,
+  motivo_hospitalizacion = null,
+  receta = null,
   archivos = [],
 }) {
   // 1. Asegurar historia clínica para la mascota
@@ -494,14 +622,14 @@ export async function crearHistorial({
   }
 
   // 4. Verificar si cita_id ya está vinculada en consultas_medicas (por restricción UNIQUE id_cita)
-  let idCitaVincular = cita_id || null;
+  const idCitaVincular = cita_id || null;
   if (idCitaVincular) {
     const [[existeCita]] = await pool.execute(
       'SELECT id_consulta FROM consultas_medicas WHERE id_cita = ? LIMIT 1',
       [idCitaVincular]
     );
     if (existeCita) {
-      idCitaVincular = null;
+      throw new ConflictError('Esta cita ya cuenta con una consulta médica registrada.');
     }
   }
 
@@ -551,7 +679,54 @@ export async function crearHistorial({
     }
   }
 
-  // 7. Si se adjuntaron fotos o PDFs en la atención de la cita, guardarlos en archivos_procedimiento
+  // 7. Si requiere hospitalización, crear ingreso activo vinculado a la consulta
+  if (requiere_hospitalizacion) {
+    const [[hospActiva]] = await pool.execute(
+      "SELECT id_hospitalizacion FROM hospitalizaciones WHERE id_mascota = ? AND estado = 'Activa' LIMIT 1",
+      [mascota_id]
+    );
+    if (!hospActiva) {
+      await pool.execute(
+        `INSERT INTO hospitalizaciones
+          (id_mascota, id_veterinario, id_consulta, fecha_ingreso, motivo, tratamientos_realizados, observaciones, estado)
+         VALUES (?, ?, ?, NOW(), ?, ?, ?, 'Activa')`,
+        [
+          mascota_id,
+          idVeterinario,
+          consultaId,
+          motivo_hospitalizacion || diagnostico || motivo,
+          tratamiento,
+          notas || null,
+        ]
+      );
+    }
+  }
+
+  // 7b. Si se formularon medicamentos, guardar receta_medica + detalle_receta
+  if (receta && Array.isArray(receta.medicamentos) && receta.medicamentos.length > 0) {
+    const [recRes] = await pool.execute(
+      `INSERT INTO recetas_medicas (id_consulta, fecha_emision, indicaciones_generales, estado)
+       VALUES (?, NOW(), ?, 'Activa')`,
+      [consultaId, receta.indicaciones_generales || null]
+    );
+    const recetaId = recRes.insertId;
+    for (const item of receta.medicamentos) {
+      await pool.execute(
+        `INSERT INTO detalle_receta (id_receta, id_medicamento, dosis, frecuencia, duracion, instrucciones)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          recetaId,
+          item.id_medicamento,
+          item.dosis,
+          item.frecuencia || null,
+          item.duracion || null,
+          item.instrucciones || null,
+        ]
+      );
+    }
+  }
+
+  // 8. Si se adjuntaron fotos o PDFs en la atención de la cita, guardarlos en archivos_procedimiento
   let archivosGuardados = [];
   if (archivos && archivos.length > 0) {
     archivosGuardados = await subirArchivosConsulta({

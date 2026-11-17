@@ -8,7 +8,7 @@ const telefonoRegex = /^[0-9+\-\s]{7,15}$/;
 const nombreRegex = /^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s.'-]+$/;
 const cedulaRegex = /^[a-zA-Z0-9-]+$/;
 
-const mascotaSchema = z.object({
+export const mascotaSchema = z.object({
   nombre: z
     .string({ required_error: 'El nombre de la mascota es obligatorio.' })
     .trim()
@@ -50,6 +50,20 @@ const mascotaSchema = z.object({
     })
     .refine((n) => n === null || (n > 0 && n <= 300), 'El peso debe ser un número positivo entre 0.1 y 300 kg.'),
   color: z.string().trim().max(80, 'El color no puede superar 80 caracteres.').optional().nullable(),
+  foto: z
+    .object({
+      nombre_archivo: z.string().trim().min(1).max(255),
+      mime_type: z
+        .string()
+        .trim()
+        .refine((m) => ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'].includes(m.toLowerCase()), {
+          message: 'La foto debe ser una imagen (JPG, PNG, WEBP o GIF).',
+        }),
+      tamano_bytes: z.coerce.number().int().nonnegative().max(10 * 1024 * 1024, 'La foto no debe superar 10 MB.').optional().nullable(),
+      base64_data: z.string().min(10, 'El contenido de la imagen es inválido.'),
+    })
+    .optional()
+    .nullable(),
 });
 
 export const registrarClienteMascotaSchema = z.object({

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import api from "../services/api";
+import { useFeedback } from "../context/FeedbackContext";
 import Spinner from "../components/Spinner";
 import { 
   UsersThree, Plus, Key, ShieldCheck, Stethoscope, ClipboardText, 
@@ -16,6 +17,7 @@ const nombreRegex = /^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s.'-]+$/;
 const cedulaRegex = /^[a-zA-Z0-9-]+$/;
 
 export default function UsuariosPage() {
+  const { notify, confirm } = useFeedback();
   const [usuarios,     setUsuarios]     = useState([]);
   const [loading,      setLoading]      = useState(true);
   const [error,        setError]        = useState("");
@@ -111,14 +113,20 @@ export default function UsuariosPage() {
   const handleToggleEstado = async (u) => {
     const nuevoEstado = !u.activo;
     const accionText = nuevoEstado ? "activar" : "desactivar";
-    if (!window.confirm(`¿Confirma que desea ${accionText} el acceso de ${u.nombre}?`)) return;
+    const ok = await confirm({
+      title: `${nuevoEstado ? "Activar" : "Desactivar"} usuario`,
+      message: `¿Confirma que desea ${accionText} el acceso de ${u.nombre}?`,
+      confirmLabel: nuevoEstado ? "Activar" : "Desactivar",
+      tone: nuevoEstado ? "primary" : "danger",
+    });
+    if (!ok) return;
 
     try {
       await api.patch(`/usuarios/${u.id}/estado`, { activo: nuevoEstado });
       loadUsuarios();
       showSuccess(`Cuenta de ${u.nombre} ${nuevoEstado ? 'activada' : 'desactivada'} correctamente.`);
     } catch (err) {
-      alert(err.response?.data?.message || "Error al actualizar estado.");
+      notify.error(err.response?.data?.message || "Error al actualizar estado.");
     }
   };
 

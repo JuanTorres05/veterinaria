@@ -9,14 +9,16 @@ import {
   ClipboardText,
   Monitor,
   PawPrint,
-  UsersThree
+  UsersThree,
+  FirstAidKit
 } from "@phosphor-icons/react";
 
 const NAV_ITEMS = [
-  { to: "/dashboard", label: "Inicio",    icon: House,         roles: ["admin", "veterinario", "recepcionista"] },
-  { to: "/agenda",    label: "Agenda",    icon: Calendar,      roles: ["admin", "veterinario", "recepcionista"] },
-  { to: "/monitoreo", label: "Monitoreo", icon: Monitor,       roles: ["admin", "veterinario", "recepcionista"] },
-  { to: "/pacientes", label: "Pacientes", icon: ClipboardText, roles: ["admin", "veterinario", "recepcionista"] },
+  { to: "/dashboard",       label: "Inicio",          icon: House,         roles: ["admin", "veterinario", "recepcionista"] },
+  { to: "/agenda",          label: "Agenda",          icon: Calendar,      roles: ["admin", "veterinario", "recepcionista"] },
+  { to: "/monitoreo",       label: "Sala de Espera",  icon: Monitor,       roles: ["admin", "veterinario", "recepcionista"] },
+  { to: "/hospitalizacion", label: "Hospitalización", icon: FirstAidKit,   roles: ["admin", "veterinario", "recepcionista"] },
+  { to: "/pacientes",       label: "Pacientes",       icon: ClipboardText, roles: ["admin", "veterinario", "recepcionista"] },
   { to: "/registrar", label: "Registrar", icon: UserPlus,      roles: ["admin", "recepcionista"] },
   { to: "/reportes",  label: "Reportes",  icon: ChartBar,      roles: ["admin"] },
   { to: "/usuarios",  label: "Usuarios",  icon: UsersThree,    roles: ["admin"] },

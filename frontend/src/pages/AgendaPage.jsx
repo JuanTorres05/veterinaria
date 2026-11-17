@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useFeedback } from "../context/FeedbackContext";
 import api from "../services/api";
 import Spinner from "../components/Spinner";
+import RecetaFormSection from "../components/RecetaFormSection";
 import { formatBytes, leerArchivosParaSubida } from "../utils/archivos";
 import { 
   CalendarBlank, Plus, Trash, X, ArrowCounterClockwise, Check, 
@@ -46,6 +48,7 @@ const ESTADO_STYLES = {
 
 export default function AgendaPage() {
   const { user } = useAuth();
+  const { notify, confirm, promptInput } = useFeedback();
   const isAdminOrRec = user?.rol === "admin" || user?.rol === "recepcionista";
   const canAtender   = user?.rol === "veterinario" || user?.rol === "admin";
 
@@ -73,6 +76,8 @@ export default function AgendaPage() {
   const [fechaInput,       setFechaInput]       = useState(todayStr);
   const [horaInput,        setHoraInput]        = useState("09:00");
   const [motivoInput,      setMotivoInput]      = useState("");
+  const [citasDiaModal,    setCitasDiaModal]    = useState([]);
+  const [loadingDisp,      setLoadingDisp]      = useState(false);
   
   const [formError,        setFormError]        = useState("");
   const [invalidFields,    setInvalidFields]    = useState({});
@@ -90,6 +95,9 @@ export default function AgendaPage() {
   const [diagnosticoInput,  setDiagnosticoInput]  = useState("");
   const [tratamientoInput,  setTratamientoInput]  = useState("");
   const [notasInput,        setNotasInput]        = useState("");
+  const [requiereHosp,      setRequiereHosp]      = useState(false);
+  const [recetaMeds,        setRecetaMeds]        = useState([]);
+  const [indicacionesReceta,setIndicacionesReceta]= useState("");
   const [archivosInput,     setArchivosInput]     = useState([]);
   const [atencionError,     setAtencionError]     = useState("");
   const [guardandoAtencion, setGuardandoAtencion] = useState(false);
@@ -132,6 +140,30 @@ export default function AgendaPage() {
   useEffect(() => { loadCitas(); }, [loadCitas]);
   useEffect(() => { if (modalOpen) loadModalData(); }, [modalOpen]);
 
+  // Cargar citas del día seleccionado cuando el modal de agendar está abierto para mostrar disponibilidad del médico
+  useEffect(() => {
+    if (!modalOpen || !fechaInput) {
+      setCitasDiaModal([]);
+      return;
+    }
+    let active = true;
+    setLoadingDisp(true);
+    api
+      .get("/citas", { params: { fecha: fechaInput } })
+      .then((res) => {
+        if (active) setCitasDiaModal(res.data || []);
+      })
+      .catch(() => {
+        if (active) setCitasDiaModal([]);
+      })
+      .finally(() => {
+        if (active) setLoadingDisp(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [modalOpen, fechaInput]);
+
   function showSuccess(msg) {
     setSuccessMsg(msg);
     clearTimeout(successTimer.current);
@@ -141,7 +173,12 @@ export default function AgendaPage() {
   const handleUpdateStatus = async (id, estado) => {
     let notasCancelacion = null;
     if (estado === "cancelada") {
-      const motivo = window.prompt("Ingresa el motivo de cancelación de la cita (Opcional):");
+      const motivo = await promptInput({
+        title: "Cancelar cita",
+        message: "Ingresa el motivo de cancelación de la cita (opcional).",
+        placeholder: "Ej. Propietario solicitó reprogramación...",
+        confirmLabel: "Cancelar cita",
+      });
       if (motivo === null) return;
       notasCancelacion = motivo.trim() || "Cancelada por la clínica";
     }
@@ -149,17 +186,24 @@ export default function AgendaPage() {
       await api.patch(`/citas/${id}/estado`, { estado, notas_cancelacion: notasCancelacion }); 
       loadCitas(); 
     } catch (err) { 
-      alert(err.response?.data?.message || "Error al actualizar estado."); 
+      notify.error(err.response?.data?.message || "Error al actualizar estado."); 
     }
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm("¿Confirma que desea eliminar esta cita de la agenda?")) return;
+    const ok = await confirm({
+      title: "Eliminar cita",
+      message: "¿Confirma que desea eliminar esta cita de la agenda?",
+      confirmLabel: "Eliminar",
+      tone: "danger",
+    });
+    if (!ok) return;
     try { 
       await api.delete(`/citas/${id}`); 
       loadCitas(); 
+      notify.success("Cita eliminada de la agenda.");
     } catch (err) { 
-      alert(err.response?.data?.message || "Error al eliminar cita."); 
+      notify.error(err.response?.data?.message || "Error al eliminar cita."); 
     }
   };
 
@@ -170,6 +214,9 @@ export default function AgendaPage() {
     setDiagnosticoInput("");
     setTratamientoInput("");
     setNotasInput("");
+    setRequiereHosp(false);
+    setRecetaMeds([]);
+    setIndicacionesReceta("");
     setArchivosInput([]);
     setAtencionError("");
   };
@@ -206,6 +253,10 @@ export default function AgendaPage() {
       return setAtencionError("El tratamiento o prescripción es obligatorio (mínimo 3 caracteres).");
     }
 
+    if (recetaMeds.some((m) => !m.id_medicamento || !m.dosis.trim())) {
+      return setAtencionError("Completa el medicamento y la dosis en cada fila de la receta (o quita las filas vacías).");
+    }
+
     const tzOffset = new Date().getTimezoneOffset() * 60000;
     const localISOTime = new Date(Date.now() - tzOffset).toISOString().slice(0, 19);
 
@@ -220,6 +271,19 @@ export default function AgendaPage() {
         tratamiento: tratamientoInput.trim(),
         notas: notasInput.trim() || null,
         peso_kg: pesoInput !== "" ? Number(pesoInput) : null,
+        requiere_hospitalizacion: requiereHosp,
+        receta: recetaMeds.length > 0
+          ? {
+              indicaciones_generales: indicacionesReceta.trim() || null,
+              medicamentos: recetaMeds.map((m) => ({
+                id_medicamento: Number(m.id_medicamento),
+                dosis: m.dosis.trim(),
+                frecuencia: m.frecuencia.trim() || null,
+                duracion: m.duracion.trim() || null,
+                instrucciones: m.instrucciones.trim() || null,
+              })),
+            }
+          : null,
         archivos: archivosInput,
       });
 
@@ -875,6 +939,92 @@ export default function AgendaPage() {
                 </div>
               </div>
 
+              {/* 4b. Disponibilidad en vivo del médico para la fecha elegida */}
+              {selectedUsuarioId && fechaInput && (() => {
+                const slots = [];
+                for (let h = 7; h <= 19; h++) {
+                  if (h > 7) slots.push(`${String(h).padStart(2, "0")}:00`);
+                  slots.push(`${String(h).padStart(2, "0")}:30`);
+                }
+
+                const citasVet = citasDiaModal.filter(
+                  (c) => String(c.veterinario_id) === String(selectedUsuarioId) && c.estado !== "cancelada"
+                );
+
+                const isSlotOccupied = (slotStr) => {
+                  const slotStart = new Date(`${fechaInput}T${slotStr}:00`).getTime();
+                  const slotEnd = slotStart + 30 * 60 * 1000;
+                  return citasVet.some((c) => {
+                    const cStart = new Date(c.fecha_hora).getTime();
+                    const cEnd = cStart + 30 * 60 * 1000;
+                    return cStart < slotEnd && cEnd > slotStart;
+                  });
+                };
+
+                const ahoraMs = Date.now() - 5 * 60 * 1000;
+                const horaActualOcupada = horaInput ? isSlotOccupied(horaInput) : false;
+
+                return (
+                  <div className="rounded-xl border border-slate-700 bg-slate-900/70 p-3.5 space-y-2.5">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300">
+                        Disponibilidad del médico ({formatDateDisplay(fechaInput)})
+                      </span>
+                      <div className="flex items-center gap-3 text-[10px] font-semibold">
+                        <span className="inline-flex items-center gap-1 text-slate-300">
+                          <span className="w-2 h-2 rounded-full bg-emerald-400" /> Libre
+                        </span>
+                        <span className="inline-flex items-center gap-1 text-rose-300">
+                          <span className="w-2 h-2 rounded-full bg-rose-500" /> Ocupada
+                        </span>
+                        <span className="inline-flex items-center gap-1 text-sky-300">
+                          <span className="w-2 h-2 rounded-full bg-sky-500" /> Elegida
+                        </span>
+                      </div>
+                    </div>
+
+                    {loadingDisp ? (
+                      <p className="text-[11px] text-slate-400">Consultando horarios...</p>
+                    ) : (
+                      <div className="grid grid-cols-4 sm:grid-cols-6 gap-1.5 max-h-40 overflow-y-auto pr-1">
+                        {slots.map((slot) => {
+                          const ocupada = isSlotOccupied(slot);
+                          const pasada = new Date(`${fechaInput}T${slot}:00`).getTime() < ahoraMs;
+                          const elegida = horaInput === slot;
+
+                          return (
+                            <button
+                              key={slot}
+                              type="button"
+                              disabled={ocupada || pasada}
+                              onClick={() => setHoraInput(slot)}
+                              title={ocupada ? "Hora ocupada por otra cita" : pasada ? "Hora pasada" : `Seleccionar ${slot}`}
+                              className={`h-8 rounded-lg text-[11px] font-bold border transition-all ${
+                                ocupada
+                                  ? "bg-rose-950/70 border-rose-500/80 text-rose-300 line-through cursor-not-allowed"
+                                  : pasada
+                                  ? "bg-slate-900/40 border-slate-800 text-slate-600 cursor-not-allowed"
+                                  : elegida
+                                  ? "bg-sky-600 border-sky-400 text-white shadow-sm"
+                                  : "bg-slate-900 border-slate-700 text-slate-200 hover:border-emerald-500/70 hover:text-emerald-300"
+                              }`}
+                            >
+                              {slot}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {horaActualOcupada && (
+                      <p className="text-[11px] font-semibold text-rose-400">
+                        ⚠️ La hora {horaInput} se cruza con una cita ya agendada para este médico. Selecciona una franja libre.
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
+
               {/* 5. Motivo de Consulta (*) */}
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
@@ -1074,6 +1224,32 @@ export default function AgendaPage() {
                   className="w-full p-3.5 rounded-xl border border-slate-700 bg-slate-900 text-white placeholder-slate-500 text-xs font-medium focus:outline-none focus:border-emerald-500 resize-none"
                 />
               </div>
+
+              {/* Receta Médica Estructurada */}
+              <RecetaFormSection
+                recetaMeds={recetaMeds}
+                setRecetaMeds={setRecetaMeds}
+                indicacionesReceta={indicacionesReceta}
+                setIndicacionesReceta={setIndicacionesReceta}
+              />
+
+              {/* Opción de Hospitalización */}
+              <label className="flex items-start gap-3 p-3.5 rounded-xl border border-slate-700 bg-slate-900/80 cursor-pointer hover:border-sky-500/60 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={requiereHosp}
+                  onChange={(e) => setRequiereHosp(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 rounded accent-sky-500"
+                />
+                <div>
+                  <span className="text-xs font-bold text-white block">
+                    Requiere hospitalización / internación
+                  </span>
+                  <span className="text-[11px] text-slate-400">
+                    Ingresará automáticamente al módulo de Hospitalización vinculado a esta consulta.
+                  </span>
+                </div>
+              </label>
 
               {/* Fila 5: Adjuntar Fotos o PDFs al Historial Clínico */}
               <div>

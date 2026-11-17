@@ -2,7 +2,7 @@
 // Ahora acepta campos extendidos: cedula, direccion en clientes;
 // sexo, fecha_nacimiento, peso_kg, color en mascotas.
 
-import { ConflictError } from '../../errors/http.errors.js';
+import { ConflictError, NotFoundError } from '../../errors/http.errors.js';
 import { withTransaction } from '../../db/transaction.js';
 import * as clientesRepository from './clientes.repository.js';
 
@@ -32,6 +32,21 @@ export async function registrarClienteMascota({ cliente, mascotas }) {
   });
 }
 
+export async function agregarMascotaACliente(clienteId, mascota) {
+  return withTransaction(async (connection) => {
+    const cliente = await clientesRepository.buscarPorId(clienteId, connection);
+    if (!cliente) {
+      throw new NotFoundError('El cliente especificado no existe o está inactivo.');
+    }
+    const mascotaId = await clientesRepository.crearMascota(clienteId, mascota, connection);
+    return {
+      id: mascotaId,
+      clienteId,
+      ...mascota,
+    };
+  });
+}
+
 export async function listarClientes() {
   const rows = await clientesRepository.listarConMascotas();
 
@@ -57,7 +72,12 @@ export async function listarClientes() {
         nombre: row.mascota_nombre,
         especie: row.especie,
         raza: row.raza,
-        sexo: row.sexo
+        sexo: row.sexo,
+        fechaNacimiento: row.fecha_nacimiento || null,
+        pesoKg: row.peso_kg != null ? Number(row.peso_kg) : null,
+        fotoUrl: row.foto_url || null,
+        hospitalizado: Boolean(row.hospitalizado),
+        enSeguimiento: Boolean(row.en_seguimiento),
       });
     }
   }

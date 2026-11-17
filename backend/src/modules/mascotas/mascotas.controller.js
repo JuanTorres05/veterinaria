@@ -3,7 +3,17 @@ import {
   crearHistorialSchema,
   crearProcedimientoSchema,
   subirArchivosSchema,
+  subirFotoMascotaSchema,
 } from './mascotas.schemas.js';
+
+export async function listarMedicamentos(req, res, next) {
+  try {
+    const medicamentos = await mascotasService.listarMedicamentos();
+    return res.status(200).json(medicamentos);
+  } catch (err) {
+    return next(err);
+  }
+}
 
 export async function listarPorCliente(req, res, next) {
   try {
@@ -116,6 +126,23 @@ export async function adjuntarArchivosProcedimiento(req, res, next) {
     });
 
     return res.status(201).json(result);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export async function subirFoto(req, res, next) {
+  try {
+    const mascotaId = Number(req.params.id);
+    if (!Number.isInteger(mascotaId) || mascotaId < 1) {
+      return res.status(400).json({ message: 'El ID de mascota no es válido.' });
+    }
+    const { archivo } = subirFotoMascotaSchema.parse(req.body);
+    const result = await mascotasService.actualizarFotoMascota({ mascota_id: mascotaId, archivo });
+    if (!result) {
+      return res.status(404).json({ message: 'Mascota no encontrada.' });
+    }
+    return res.status(200).json(result);
   } catch (err) {
     return next(err);
   }

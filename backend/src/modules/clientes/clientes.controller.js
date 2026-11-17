@@ -2,7 +2,8 @@
 // Por ahora solo tenemos el registro unificado (HU-02)
 // TODO: agregar más endpoints cuando avancemos en el sprint 2 (listar, editar, etc.)
 
-import { registrarClienteMascotaSchema } from './clientes.schemas.js';
+import { z } from 'zod';
+import { registrarClienteMascotaSchema, mascotaSchema } from './clientes.schemas.js';
 import * as clientesService from './clientes.service.js';
 
 export async function registrar(req, res, next) {
@@ -24,6 +25,17 @@ export async function listar(req, res, next) {
   try {
     const result = await clientesService.listarClientes();
     return res.json(result);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export async function agregarMascota(req, res, next) {
+  try {
+    const clienteId = z.coerce.number().int().positive('El ID del cliente no es válido.').parse(req.params.clienteId);
+    const mascota = mascotaSchema.parse(req.body);
+    const result = await clientesService.agregarMascotaACliente(clienteId, mascota);
+    return res.status(201).json(result);
   } catch (err) {
     return next(err);
   }

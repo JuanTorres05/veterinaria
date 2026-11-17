@@ -2,10 +2,48 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import api from "../services/api";
+import { resolveArchivoUrl } from "../utils/archivos";
+import PetPhotoPicker from "../components/PetPhotoPicker";
 import { 
-  Users, MagnifyingGlass, Phone, Envelope, Cat, Dog, Bird, PawPrint,
-  ArrowRight, WarningCircle, Plus, CaretLeft, CaretRight, FolderUser
+  Users, MagnifyingGlass, Phone, Envelope, Cat, PawPrint,
+  ArrowRight, WarningCircle, Plus, CaretLeft, CaretRight, FolderUser, X,
+  CheckCircle, Eye, FirstAid, Scales, CalendarBlank
 } from "@phosphor-icons/react";
+
+function calcularEdad(fechaNac) {
+  if (!fechaNac) return "No registrada";
+  const hoy = new Date();
+  const nac = new Date(fechaNac);
+  if (isNaN(nac.getTime())) return "No registrada";
+  let meses = (hoy.getFullYear() - nac.getFullYear()) * 12 + (hoy.getMonth() - nac.getMonth());
+  if (hoy.getDate() < nac.getDate()) meses--;
+  if (meses < 1) return "Recién nacido";
+  if (meses < 12) return `${meses} ${meses === 1 ? "mes" : "meses"}`;
+  const anios = Math.floor(meses / 12);
+  return `${anios} ${anios === 1 ? "año" : "años"}`;
+}
+
+function getEstadoClinico(m) {
+  if (m.hospitalizado) {
+    return {
+      label: "Hospitalizado",
+      cls: "bg-sky-100/95 text-sky-900 border-sky-200",
+      icon: FirstAid,
+    };
+  }
+  if (m.enSeguimiento) {
+    return {
+      label: "En seguimiento",
+      cls: "bg-amber-100/95 text-amber-900 border-amber-200",
+      icon: Eye,
+    };
+  }
+  return {
+    label: "Saludable",
+    cls: "bg-emerald-100/95 text-emerald-900 border-emerald-200",
+    icon: CheckCircle,
+  };
+}
 
 /* Sistema de Chips por Especie de Mascota con Significados de Color */
 function getEspecieBadge(especie) {
@@ -25,7 +63,7 @@ function getEspecieBadge(especie) {
   return { bg: "bg-indigo-50 text-indigo-800 border-indigo-200", icon: "🐾", label: especie || "Mascota" };
 }
 
-const ITEMS_PER_PAGE = 6;
+const ITEMS_PER_PAGE = 12;
 
 export default function PacientesPage() {
   const { user } = useAuth();
@@ -35,6 +73,61 @@ export default function PacientesPage() {
   const [error,        setError]        = useState("");
   const [searchQuery,  setSearchQuery]  = useState("");
   const [currentPage,  setCurrentPage]  = useState(1);
+
+  // Modal para agregar mascota a cliente existente
+  const [clienteModal, setClienteModal] = useState(null);
+  const [savingMascota, setSavingMascota] = useState(false);
+  const [modalError, setModalError] = useState("");
+  const [formMascota, setFormMascota] = useState({
+    nombre: "",
+    especie: "Perro",
+    raza: "",
+    sexo: "Desconocido",
+    fechaNacimiento: "",
+    pesoKg: "",
+    color: "",
+    foto: null,
+  });
+
+  const abrirModalMascota = (cliente) => {
+    setClienteModal(cliente);
+    setModalError("");
+    setFormMascota({
+      nombre: "",
+      especie: "Perro",
+      raza: "",
+      sexo: "Desconocido",
+      fechaNacimiento: "",
+      pesoKg: "",
+      color: "",
+      foto: null,
+    });
+  };
+
+  const handleAgregarMascota = async (e) => {
+    e.preventDefault();
+    if (!clienteModal) return;
+    setModalError("");
+    try {
+      setSavingMascota(true);
+      await api.post(`/clientes/${clienteModal.id}/mascotas`, {
+        nombre: formMascota.nombre.trim(),
+        especie: formMascota.especie.trim(),
+        raza: formMascota.raza.trim(),
+        sexo: formMascota.sexo,
+        fechaNacimiento: formMascota.fechaNacimiento || null,
+        pesoKg: formMascota.pesoKg ? Number(formMascota.pesoKg) : null,
+        color: formMascota.color.trim() || null,
+        foto: formMascota.foto || null,
+      });
+      setClienteModal(null);
+      await loadClientes();
+    } catch (err) {
+      setModalError(err.response?.data?.message || "No se pudo registrar la mascota.");
+    } finally {
+      setSavingMascota(false);
+    }
+  };
 
   const loadClientes = async () => {
     try {
@@ -67,10 +160,39 @@ export default function PacientesPage() {
     return nombre.includes(q) || cedula.includes(q) || telefono.includes(q) || correo.includes(q) || mascotasMatch;
   });
 
+  // Aplanar a fichas individuales de pacientes (mascota + propietario integrado)
+  const fichasPacientes = filteredClientes.flatMap((c) => {
+    const q = searchQuery.toLowerCase();
+    const ownerMatches =
+      (c.nombre || "").toLowerCase().includes(q) ||
+      String(c.cedula || "").toLowerCase().includes(q) ||
+      String(c.telefono || "").toLowerCase().includes(q) ||
+      (c.correo || "").toLowerCase().includes(q);
+
+    const mascotasVisibles = !q || ownerMatches
+      ? c.mascotas || []
+      : (c.mascotas || []).filter(
+          (m) =>
+            (m.nombre || "").toLowerCase().includes(q) ||
+            (m.especie || "").toLowerCase().includes(q) ||
+            (m.raza || "").toLowerCase().includes(q)
+        );
+
+    if (mascotasVisibles.length === 0 && (c.mascotas || []).length === 0) {
+      return [{ tipo: "sin_mascota", cliente: c, key: `c-${c.id}` }];
+    }
+    return mascotasVisibles.map((m) => ({
+      tipo: "mascota",
+      cliente: c,
+      mascota: m,
+      key: `m-${m.id}`,
+    }));
+  });
+
   // Cálculo de Paginación
-  const totalPages = Math.ceil(filteredClientes.length / ITEMS_PER_PAGE) || 1;
+  const totalPages = Math.ceil(fichasPacientes.length / ITEMS_PER_PAGE) || 1;
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-  const paginatedClientes = filteredClientes.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  const paginatedFichas = fichasPacientes.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
   return (
     <div className="space-y-6 animate-fade-in pb-6">
@@ -109,7 +231,7 @@ export default function PacientesPage() {
           
           {!loading && !error && (
             <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-sky-50 text-sky-800 border border-sky-200">
-              Mostrando {filteredClientes.length} {filteredClientes.length === 1 ? 'propietario' : 'propietarios'}
+              Mostrando {fichasPacientes.length} {fichasPacientes.length === 1 ? 'paciente' : 'pacientes'}
             </span>
           )}
         </div>
@@ -174,86 +296,151 @@ export default function PacientesPage() {
         </div>
       ) : (
         <>
-          {/* Grid de Expedientes de Clientes */}
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {paginatedClientes.map(c => (
-              <div 
-                key={c.id} 
-                className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between gap-4">
-
-                {/* Propietario info sin etiqueta repetida sobrante */}
-                <div className="flex items-start gap-3.5">
-                  <div className="w-10 h-10 rounded-xl bg-sky-50 border border-sky-200 text-sky-700 flex items-center justify-center flex-shrink-0 font-bold">
-                    <Users size={20} weight="fill" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <h3 className="font-extrabold text-base text-slate-900 leading-tight truncate">
-                      {c.nombre}
-                    </h3>
-                    <p className="text-[11px] font-semibold text-slate-400 mt-0.5">
-                      {c.cedula ? `C.C. ${c.cedula}` : 'Titular del Expediente'}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Datos de Contacto con Tooltip en Hover para Correos Truncados */}
-                <div className="space-y-2 bg-slate-50/80 p-3 rounded-xl border border-slate-100">
-                  <p className="flex items-center gap-2 text-xs font-semibold text-slate-700">
-                    <Phone size={14} className="text-sky-600 flex-shrink-0" />
-                    <span className="truncate">{c.telefono}</span>
-                  </p>
-
-                  {/* Tooltip Nativo con title={c.correo} */}
-                  <p 
-                    title={`Correo de contacto: ${c.correo}`} 
-                    className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-help">
-                    <Envelope size={14} className="text-sky-600 flex-shrink-0" />
-                    <span className="truncate max-w-[210px] text-slate-700 hover:text-sky-700 transition-colors">
-                      {c.correo}
-                    </span>
-                  </p>
-                </div>
-
-                {/* Chips de Mascotas Codificados por Especie */}
-                <div className="pt-3 border-t border-slate-100">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-                      <Cat size={13} className="text-slate-400" />
-                      Mascotas Asignadas ({c.mascotas.length})
-                    </span>
-                  </div>
-
-                  {c.mascotas.length === 0 ? (
-                    <p className="text-xs text-slate-400 italic">Sin mascotas registradas aún.</p>
-                  ) : (
-                    <div className="flex flex-wrap gap-2">
-                      {c.mascotas.map(m => {
-                        const badge = getEspecieBadge(m.especie);
-                        return (
-                          <Link 
-                            key={m.id} 
-                            to={`/mascotas/${m.id}`}
-                            title={`Ver ficha clínica de ${m.nombre}`}
-                            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl border text-xs font-extrabold transition-all hover:scale-[1.02] active:scale-95 shadow-2xs ${badge.bg}`}>
-                            <span>{badge.icon}</span>
-                            <span>{m.nombre}</span>
-                            <ArrowRight size={11} weight="bold" className="ml-0.5 opacity-70" />
-                          </Link>
-                        );
-                      })}
+          {/* Grid Unificado de Fichas de Pacientes */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+            {paginatedFichas.map((item) => {
+              const c = item.cliente;
+              if (item.tipo === "sin_mascota") {
+                return (
+                  <div
+                    key={item.key}
+                    className="bg-white border border-dashed border-slate-300 rounded-2xl p-4 flex flex-col justify-between gap-4"
+                  >
+                    <div className="space-y-2">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600">
+                        Sin mascota registrada
+                      </span>
+                      <h3 className="font-extrabold text-sm text-slate-900">{c.nombre}</h3>
+                      <p className="text-[11px] text-slate-500">
+                        {c.cedula ? `C.C. ${c.cedula}` : ""}
+                        {c.telefono ? ` • ${c.telefono}` : ""}
+                      </p>
                     </div>
-                  )}
-                </div>
+                    {canRegister && (
+                      <button
+                        type="button"
+                        onClick={() => abrirModalMascota(c)}
+                        className="w-full py-2 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 text-xs font-bold inline-flex items-center justify-center gap-1.5 transition-colors"
+                      >
+                        <Plus size={14} weight="bold" />
+                        <span>Agregar Mascota</span>
+                      </button>
+                    )}
+                  </div>
+                );
+              }
 
-              </div>
-            ))}
+              const m = item.mascota;
+              const badge = getEspecieBadge(m.especie);
+              const estado = getEstadoClinico(m);
+              const EstadoIcon = estado.icon;
+              const esMacho = m.sexo === "Macho";
+              const esHembra = m.sexo === "Hembra";
+
+              return (
+                <div
+                  key={item.key}
+                  className="group bg-white border border-slate-200 hover:border-sky-300 rounded-2xl p-3.5 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between gap-3"
+                >
+                  <Link to={`/mascotas/${m.id}`} className="flex flex-col gap-3">
+                    {/* Foto con badge de estado superpuesto */}
+                    <div className="relative h-44 w-full rounded-xl overflow-hidden bg-slate-100 flex items-center justify-center">
+                      {m.fotoUrl ? (
+                        <img
+                          src={resolveArchivoUrl(m.fotoUrl)}
+                          alt={m.nombre}
+                          className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300"
+                        />
+                      ) : (
+                        <span className="text-5xl select-none">{badge.icon}</span>
+                      )}
+
+                      <span
+                        className={`absolute top-2.5 right-2.5 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border shadow-xs backdrop-blur-xs ${estado.cls}`}
+                      >
+                        <EstadoIcon size={12} weight="fill" />
+                        <span>{estado.label}</span>
+                      </span>
+                    </div>
+
+                    {/* Datos de la mascota */}
+                    <div className="px-0.5 space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <h3 className="font-extrabold text-base text-slate-900 flex items-center gap-1.5 truncate">
+                          <span className="truncate">{m.nombre}</span>
+                          {esMacho && <span className="text-sky-600 font-bold">♂</span>}
+                          {esHembra && <span className="text-rose-500 font-bold">♀</span>}
+                        </h3>
+                        <ArrowRight size={14} weight="bold" className="text-slate-300 group-hover:text-sky-600 transition-colors flex-shrink-0" />
+                      </div>
+
+                      <div className="space-y-1 text-xs text-slate-600 font-medium">
+                        <p className="flex items-center gap-2 truncate">
+                          <PawPrint size={13} weight="fill" className="text-slate-400 flex-shrink-0" />
+                          <span className="truncate">
+                            {m.especie}{m.raza ? ` - ${m.raza}` : ""}
+                          </span>
+                        </p>
+                        <p className="flex items-center gap-2">
+                          <CalendarBlank size={13} weight="fill" className="text-slate-400 flex-shrink-0" />
+                          <span>Edad: {calcularEdad(m.fechaNacimiento)}</span>
+                        </p>
+                        <p className="flex items-center gap-2">
+                          <Scales size={13} weight="fill" className="text-slate-400 flex-shrink-0" />
+                          <span>Peso: {m.pesoKg != null ? `${m.pesoKg} kg` : "No registrado"}</span>
+                        </p>
+                      </div>
+                    </div>
+                  </Link>
+
+                  {/* Información del propietario integrada dentro de la ficha */}
+                  <div className="pt-2.5 border-t border-slate-100 px-0.5 space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5 truncate">
+                        <Users size={13} className="text-sky-600 flex-shrink-0" />
+                        <span className="truncate">{c.nombre}</span>
+                      </p>
+                      {canRegister && (
+                        <button
+                          type="button"
+                          onClick={() => abrirModalMascota(c)}
+                          title={`Agregar otra mascota a ${c.nombre}`}
+                          className="text-[10px] font-bold text-sky-700 hover:text-sky-800 hover:bg-sky-50 px-1.5 py-0.5 rounded-md flex items-center gap-0.5 flex-shrink-0 transition-colors"
+                        >
+                          <Plus size={11} weight="bold" />
+                          <span>Mascota</span>
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
+                      <span className="truncate">{c.cedula ? `C.C. ${c.cedula}` : "Titular"}</span>
+                      {c.telefono && (
+                        <span className="inline-flex items-center gap-1 flex-shrink-0">
+                          <Phone size={11} className="text-slate-400" />
+                          {c.telefono}
+                        </span>
+                      )}
+                    </div>
+                    {c.correo && (
+                      <p
+                        title={c.correo}
+                        className="text-[11px] text-slate-400 flex items-center gap-1 truncate"
+                      >
+                        <Envelope size={11} className="flex-shrink-0" />
+                        <span className="truncate">{c.correo}</span>
+                      </p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
           {/* Paginador Sobrio cuando hay más de una página */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between pt-4 border-t border-slate-200 flex-wrap gap-3">
               <span className="text-xs font-semibold text-slate-500">
-                Página {currentPage} de {totalPages} ({filteredClientes.length} clientes en total)
+                Página {currentPage} de {totalPages} ({fichasPacientes.length} pacientes en total)
               </span>
 
               <div className="flex items-center gap-2">
@@ -291,6 +478,171 @@ export default function PacientesPage() {
             </div>
           )}
         </>
+      )}
+
+      {/* Modal: Agregar nueva mascota a cliente existente */}
+      {clienteModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-lg shadow-xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/70">
+              <div>
+                <h2 className="text-sm font-bold text-slate-900">
+                  Agregar Mascota a {clienteModal.nombre}
+                </h2>
+                <p className="text-xs text-slate-500">
+                  C.C. {clienteModal.cedula} • Se abrirá su historia clínica automáticamente
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setClienteModal(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors"
+              >
+                <X size={18} weight="bold" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAgregarMascota} className="p-6 space-y-4">
+              {modalError && (
+                <div className="p-3 rounded-xl border border-rose-200 bg-rose-50 text-rose-800 text-xs font-semibold flex items-center gap-2">
+                  <WarningCircle size={16} weight="bold" className="text-rose-600 flex-shrink-0" />
+                  <span>{modalError}</span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
+                    Nombre de la mascota *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    minLength={2}
+                    maxLength={80}
+                    value={formMascota.nombre}
+                    onChange={(e) => setFormMascota((f) => ({ ...f, nombre: e.target.value }))}
+                    placeholder="Ej. Toby"
+                    className="w-full h-10 px-3 rounded-xl border border-slate-200 text-xs font-medium focus:outline-none focus:border-sky-600"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
+                    Especie *
+                  </label>
+                  <select
+                    value={formMascota.especie}
+                    onChange={(e) => setFormMascota((f) => ({ ...f, especie: e.target.value }))}
+                    className="w-full h-10 px-3 rounded-xl border border-slate-200 text-xs font-medium bg-white focus:outline-none focus:border-sky-600"
+                  >
+                    <option value="Perro">Perro</option>
+                    <option value="Gato">Gato</option>
+                    <option value="Conejo">Conejo</option>
+                    <option value="Ave">Ave</option>
+                    <option value="Otro">Otro</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
+                    Raza *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    minLength={2}
+                    maxLength={80}
+                    value={formMascota.raza}
+                    onChange={(e) => setFormMascota((f) => ({ ...f, raza: e.target.value }))}
+                    placeholder="Ej. Criollo"
+                    className="w-full h-10 px-3 rounded-xl border border-slate-200 text-xs font-medium focus:outline-none focus:border-sky-600"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
+                    Sexo
+                  </label>
+                  <select
+                    value={formMascota.sexo}
+                    onChange={(e) => setFormMascota((f) => ({ ...f, sexo: e.target.value }))}
+                    className="w-full h-10 px-3 rounded-xl border border-slate-200 text-xs font-medium bg-white focus:outline-none focus:border-sky-600"
+                  >
+                    <option value="Macho">Macho</option>
+                    <option value="Hembra">Hembra</option>
+                    <option value="Desconocido">Desconocido</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
+                    Fecha de nacimiento
+                  </label>
+                  <input
+                    type="date"
+                    max={new Date().toISOString().split("T")[0]}
+                    value={formMascota.fechaNacimiento}
+                    onChange={(e) => setFormMascota((f) => ({ ...f, fechaNacimiento: e.target.value }))}
+                    className="w-full h-10 px-3 rounded-xl border border-slate-200 text-xs font-medium focus:outline-none focus:border-sky-600"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
+                    Peso (kg)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0.1"
+                    max="300"
+                    value={formMascota.pesoKg}
+                    onChange={(e) => setFormMascota((f) => ({ ...f, pesoKg: e.target.value }))}
+                    placeholder="Ej. 12.5"
+                    className="w-full h-10 px-3 rounded-xl border border-slate-200 text-xs font-medium focus:outline-none focus:border-sky-600"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
+                  Color / Señas particulares
+                </label>
+                <input
+                  type="text"
+                  maxLength={80}
+                  value={formMascota.color}
+                  onChange={(e) => setFormMascota((f) => ({ ...f, color: e.target.value }))}
+                  placeholder="Ej. Blanco con manchas café"
+                  className="w-full h-10 px-3 rounded-xl border border-slate-200 text-xs font-medium focus:outline-none focus:border-sky-600"
+                />
+              </div>
+
+              <PetPhotoPicker
+                value={formMascota.foto}
+                onChange={(foto) => setFormMascota((f) => ({ ...f, foto }))}
+              />
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setClienteModal(null)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingMascota}
+                  className="px-4 py-2 rounded-xl bg-sky-700 hover:bg-sky-600 disabled:opacity-50 text-white text-xs font-semibold transition-colors"
+                >
+                  {savingMascota ? "Guardando..." : "Registrar Mascota"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
     </div>

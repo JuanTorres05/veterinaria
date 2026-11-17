@@ -36,7 +36,8 @@ app.use(cors({
   maxAge: 86400
 }));
 app.use(express.json({ limit: env.http.jsonLimit }));
-app.use(rateLimit({
+app.use('/uploads', express.static(path.resolve(__dirname, '../uploads')));
+app.use('/api', rateLimit({
   windowMs: env.http.rateLimitWindowMs,
   limit: env.http.rateLimitMax,
   standardHeaders: 'draft-8',
@@ -51,7 +52,6 @@ app.use('/api/auth', rateLimit({
   message: { message: 'Demasiados intentos. Intenta de nuevo más tarde.' }
 }));
 
-app.use('/uploads', express.static(path.resolve(__dirname, '../uploads')));
 app.use('/api', routes);
 app.use(errorHandler);
 

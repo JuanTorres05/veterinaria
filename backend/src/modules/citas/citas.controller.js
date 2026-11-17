@@ -4,7 +4,8 @@ import { crearCitaSchema, cambiarEstadoSchema } from './citas.schemas.js';
 export async function listar(req, res, next) {
   try {
     const { fecha, estado } = req.query;
-    const result = await citasService.listarCitas({ fecha, estado });
+    const veterinarioUsuarioId = req.user?.rol === 'veterinario' ? req.user.sub : null;
+    const result = await citasService.listarCitas({ fecha, estado, veterinarioUsuarioId });
     return res.json(result);
   } catch (err) {
     return next(err);
@@ -14,7 +15,10 @@ export async function listar(req, res, next) {
 export async function crear(req, res, next) {
   try {
     const payload = crearCitaSchema.parse(req.body);
-    const result = await citasService.crearCita(payload);
+    const result = await citasService.crearCita({
+      ...payload,
+      usuario_registro_id: req.user?.sub || null,
+    });
     return res.status(201).json(result);
   } catch (err) {
     return next(err);
