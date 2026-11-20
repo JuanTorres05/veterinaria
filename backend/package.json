@@ -9,7 +9,8 @@
     "start": "node src/server.js",
     "setup": "node scripts/setup.js",
     "seed": "node scripts/seed.js",
-    "db:create": "node scripts/create-db.js"
+    "db:create": "node scripts/create-db.js",
+    "db:init": "node scripts/init-cloud-db.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

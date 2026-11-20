@@ -20,7 +20,7 @@ const nodeEnv = process.env.NODE_ENV || 'development';
 
 const rawOrigins = (process.env.CORS_ORIGINS || '')
   .split(',')
-  .map((origin) => origin.trim())
+  .map((origin) => origin.trim().replace(/\/+$/, ''))
   .filter(Boolean);
 
 // En desarrollo, si CORS_ORIGINS no está definido, permitir Vite por defecto
@@ -46,11 +46,14 @@ export const env = {
   trustProxy: process.env.TRUST_PROXY === 'true',
   allowedOrigins,
   db: {
-    host: process.env.DB_HOST || '127.0.0.1',
-    port: Number(process.env.DB_PORT || 3306),
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || 'datavet'
+    host: process.env.DB_HOST || process.env.MYSQLHOST || '127.0.0.1',
+    port: Number(process.env.DB_PORT || process.env.MYSQLPORT || 3306),
+    user: process.env.DB_USER || process.env.MYSQLUSER || 'root',
+    password: process.env.DB_PASSWORD || process.env.MYSQLPASSWORD || '',
+    database: process.env.DB_NAME || process.env.MYSQLDATABASE || 'datavet',
+    ssl: process.env.DB_SSL === 'true'
+      ? { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false' }
+      : false
   },
   jwt: {
     secret: jwtSecret || 'datavet_dev_jwt_secret_key_super_secure_for_local_testing_2026',

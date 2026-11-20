@@ -11,8 +11,8 @@ const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
-  // SEGURIDAD I5: cifrar la conexión con la BD en producción
-  ssl: env.nodeEnv === 'production' ? { rejectUnauthorized: true } : false
+  // SSL configurable vía DB_SSL=true (para BDs externas que exijan TLS)
+  ssl: env.db.ssl
 });
 
 export default pool;
