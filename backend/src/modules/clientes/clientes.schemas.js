@@ -82,11 +82,10 @@ export const registrarClienteMascotaSchema = z.object({
       .max(20, 'La cédula no puede superar 20 caracteres.')
       .regex(cedulaRegex, 'La cédula solo puede contener números, letras o guiones.'),
     direccion: z
-      .string()
+      .string({ required_error: 'La dirección de residencia es obligatoria.' })
       .trim()
-      .max(255, 'La dirección no puede superar 255 caracteres.')
-      .optional()
-      .nullable(),
+      .min(5, 'La dirección de residencia es obligatoria (mínimo 5 caracteres).')
+      .max(255, 'La dirección no puede superar 255 caracteres.'),
     telefono: z
       .string({ required_error: 'El teléfono es obligatorio.' })
       .trim()

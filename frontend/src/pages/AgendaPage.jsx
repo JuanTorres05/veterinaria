@@ -158,12 +158,15 @@ export default function AgendaPage() {
     if (estado === "cancelada") {
       const motivo = await promptInput({
         title: "Cancelar cita",
-        message: "Ingresa el motivo de cancelación de la cita (opcional).",
+        message: "Ingresa el motivo de cancelación de la cita (obligatorio).",
         placeholder: "Ej. Propietario solicitó reprogramación...",
         confirmLabel: "Cancelar cita",
       });
       if (motivo === null) return;
-      notasCancelacion = motivo.trim() || "Cancelada por la clínica";
+      if (motivo.trim().length < 3) {
+        return notify.error("Debes ingresar un motivo de cancelación (mínimo 3 caracteres).");
+      }
+      notasCancelacion = motivo.trim();
     }
     try { 
       await api.patch(`/citas/${id}/estado`, { estado, notas_cancelacion: notasCancelacion }); 
@@ -304,7 +307,7 @@ export default function AgendaPage() {
           </p>
         </div>
         {isAdminOrRec && (
-          <button onClick={() => setModalOpen(true)} className="btn-action-create">
+          <button onClick={() => setModalOpen(true)} className="btn-action-create w-full sm:w-auto justify-center">
             <Plus size={16} weight="bold" />
             <span>Agendar Cita</span>
           </button>
@@ -633,16 +636,16 @@ export default function AgendaPage() {
 
       {/* ── MODAL "AGENDAR NUEVA CITA" — Rediseñado al Dark Theme Integrado ── */}
       {modalOpen && (
-        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="w-full max-w-xl rounded-2xl border border-slate-800 bg-[#0F172A] text-slate-100 shadow-2xl overflow-hidden">
+        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 z-50 animate-fade-in">
+          <div className="w-full max-w-xl rounded-t-3xl sm:rounded-2xl border border-slate-800 bg-[#0F172A] text-slate-100 shadow-2xl overflow-hidden max-h-[92dvh] flex flex-col">
 
             {/* Modal Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/90">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-sky-600 text-white flex items-center justify-center font-bold">
+            <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-slate-800 bg-slate-900/90 flex-shrink-0">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-xl bg-sky-600 text-white flex items-center justify-center font-bold flex-shrink-0">
                   <CalendarBlank size={18} weight="bold" />
                 </div>
-                <h2 className="font-extrabold text-base text-white tracking-tight">
+                <h2 className="font-extrabold text-sm sm:text-base text-white tracking-tight truncate">
                   Agendar Nueva Cita Médica
                 </h2>
               </div>
@@ -657,13 +660,14 @@ export default function AgendaPage() {
                   setFormError(""); 
                   setInvalidFields({});
                 }}
-                className="w-8 h-8 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 flex items-center justify-center transition-all">
+                className="w-8 h-8 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 flex items-center justify-center transition-all flex-shrink-0">
                 <X size={18} weight="bold" />
               </button>
             </div>
 
             {/* Formulario del Modal */}
-            <form onSubmit={handleBook} className="p-6 space-y-4">
+            <form onSubmit={handleBook} className="flex flex-col flex-1 min-h-0">
+              <div className="p-5 sm:p-6 space-y-4 overflow-y-auto flex-1">
               
               {/* Alerta de Error con Validación Visible */}
               {formError && (
@@ -931,8 +935,10 @@ export default function AgendaPage() {
                 />
               </div>
 
-              {/* Botones de Acción Unificados con el Sistema Semántico de Marca */}
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+              </div>
+
+              {/* Botones de Acción Fijos en la Parte Inferior */}
+              <div className="px-5 sm:px-6 py-4 bg-slate-900/95 border-t border-slate-800 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2.5 flex-shrink-0">
                 <button 
                   type="button" 
                   onClick={() => { 
@@ -945,13 +951,13 @@ export default function AgendaPage() {
                     setFormError(""); 
                     setInvalidFields({});
                   }}
-                  className="px-4 py-2.5 h-11 rounded-xl font-bold text-xs text-slate-300 hover:text-white border border-slate-700 hover:bg-slate-800 transition-all" 
+                  className="w-full sm:w-auto px-4 py-2.5 h-11 rounded-xl font-bold text-xs text-slate-300 hover:text-white border border-slate-700 hover:bg-slate-800 transition-all" 
                   disabled={guardando}>
                   Cancelar
                 </button>
                 <button 
                   type="submit" 
-                  className="btn-action-create" 
+                  className="btn-action-create w-full sm:w-auto justify-center" 
                   disabled={guardando}>
                   {guardando ? (
                     <>

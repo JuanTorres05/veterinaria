@@ -84,7 +84,7 @@ function LiveIndicator({ onRefresh, isRefreshing }) {
 
 /* ── CitaCard Con Botón Cancelar Discreto (Baja Prominencia) ────────────── */
 function CitaCard({ cita, onCambiarEstado, onAtenderCita, loadingId, userRol }) {
-  const { confirm } = useFeedback();
+  const { promptInput, notify } = useFeedback();
   const isPendiente = cita.estado === 'pendiente';
   const isAtendida  = cita.estado === 'atendida';
   const isCancelada = cita.estado === 'cancelada';
@@ -97,15 +97,17 @@ function CitaCard({ cita, onCambiarEstado, onAtenderCita, loadingId, userRol }) 
   const puedeCancelar = ['admin', 'recepcionista'].includes(userRol);
 
   async function handleCancelarClick() {
-    const ok = await confirm({
+    const motivo = await promptInput({
       title: 'Cancelar cita',
-      message: `¿Confirma que desea cancelar la cita de ${cita.mascota_nombre}?`,
+      message: `Indica el motivo de cancelación para la cita de ${cita.mascota_nombre}:`,
+      placeholder: 'Ej. El cliente reprogramó, no asistió, cambio de horario...',
       confirmLabel: 'Sí, cancelar cita',
-      tone: 'danger',
     });
-    if (ok) {
-      onCambiarEstado(cita.id, 'cancelada');
+    if (motivo === null) return;
+    if (motivo.trim().length < 3) {
+      return notify.error('Debes ingresar un motivo de cancelación (mínimo 3 caracteres).');
     }
+    onCambiarEstado(cita.id, 'cancelada', motivo.trim());
   }
 
   return (
@@ -191,6 +193,12 @@ function CitaCard({ cita, onCambiarEstado, onAtenderCita, loadingId, userRol }) 
               Dr(a). {cita.veterinario_nombre}
             </span>
           </div>
+
+          {isCancelada && cita.observaciones && (
+            <p className="text-xs text-rose-700 bg-rose-50 border border-rose-200/70 rounded-lg px-2.5 py-1.5 mt-2 font-medium">
+              <strong>Motivo de cancelación:</strong> {cita.observaciones}
+            </p>
+          )}
         </div>
       </div>
 
@@ -304,10 +312,13 @@ export default function MonitoreoPage() {
     loadCitas(false);
   }, [loadCitas]);
 
-  async function handleCambiarEstado(citaId, nuevoEstado) {
+  async function handleCambiarEstado(citaId, nuevoEstado, notasCancelacion = null) {
     try {
       setLoadingId(citaId);
-      const { data } = await api.patch(`/citas/${citaId}/estado`, { estado: nuevoEstado });
+      const { data } = await api.patch(`/citas/${citaId}/estado`, {
+        estado: nuevoEstado,
+        ...(notasCancelacion ? { notas_cancelacion: notasCancelacion } : {}),
+      });
       setCitas((prev) =>
         prev.map((c) => (c.id === citaId ? { ...c, ...data } : c))
       );

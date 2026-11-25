@@ -6,6 +6,7 @@ import citasRoutes from '../modules/citas/citas.routes.js';
 import reportesRoutes from '../modules/reportes/reportes.routes.js';
 import usuariosRoutes from '../modules/usuarios/usuarios.routes.js';
 import hospitalizacionesRoutes from '../modules/hospitalizaciones/hospitalizaciones.routes.js';
+import portalRoutes from '../modules/portal/portal.routes.js';
 
 const router = Router();
 
@@ -20,6 +21,7 @@ router.use('/citas', citasRoutes);
 router.use('/reportes', reportesRoutes);
 router.use('/usuarios', usuariosRoutes);
 router.use('/hospitalizaciones', hospitalizacionesRoutes);
+router.use('/portal', portalRoutes);
 
 export default router;
 

@@ -81,6 +81,13 @@ function validateCliente(cliente) {
     e.correo = "Ingresa una dirección de correo válida (ej. usuario@correo.com).";
   }
 
+  const direccion = (cliente.direccion || "").trim();
+  if (!direccion) {
+    e.direccion = "La dirección de residencia es obligatoria.";
+  } else if (direccion.length < 5) {
+    e.direccion = "La dirección debe tener al menos 5 caracteres.";
+  }
+
   return e;
 }
 
@@ -570,15 +577,16 @@ export default function RegistrarPage() {
                   </div>
 
                   <div>
-                    <FieldLabel htmlFor="c-direccion">Dirección de residencia</FieldLabel>
+                    <FieldLabel htmlFor="c-direccion" required>Dirección de residencia</FieldLabel>
                     <input
                       id="c-direccion"
                       type="text"
                       placeholder="Ej. Cra 15 #32-10, Apto 401"
                       value={form.cliente.direccion}
                       onChange={e => setCliente("direccion", e.target.value)}
-                      className="input-field"
+                      className={`input-field ${errors.cliente?.direccion ? "border-rose-500 ring-1 ring-rose-500" : ""}`}
                     />
+                    <FieldError msg={errors.cliente?.direccion} />
                   </div>
                 </div>
 

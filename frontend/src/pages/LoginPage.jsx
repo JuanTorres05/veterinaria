@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import api from "../services/api";
 import Spinner from "../components/Spinner";
@@ -52,7 +52,9 @@ export default function LoginPage() {
     try {
       const { data } = await api.post("/auth/login", form);
       login(data.token, data.user);
-      if (data.user.rol === "recepcionista") {
+      if (data.user.rol === "cliente") {
+        navigate("/portal", { replace: true });
+      } else if (data.user.rol === "recepcionista") {
         navigate("/registrar", { replace: true });
       } else {
         navigate("/dashboard", { replace: true });
@@ -286,6 +288,20 @@ export default function LoginPage() {
                 )}
               </button>
             </form>
+
+            {/* Acceso al Portal de Propietarios */}
+            <div className="mt-5 p-3.5 rounded-2xl border border-emerald-500/25 bg-emerald-950/25 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-extrabold text-emerald-300">¿Eres propietario de mascota?</p>
+                <p className="text-[11px] text-slate-400">Activa o crea tu cuenta con tu cédula</p>
+              </div>
+              <Link
+                to="/registro-propietario"
+                className="w-full sm:w-auto text-center px-3.5 py-2.5 sm:py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold whitespace-nowrap transition-all"
+              >
+                Activar / Crear
+              </Link>
+            </div>
 
             {/* Accesos de Prueba Rápidos (1-Clic AutoFill) */}
             <div className="mt-8 pt-6 border-t border-slate-800/80 space-y-3">

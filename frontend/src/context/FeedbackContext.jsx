@@ -156,18 +156,18 @@ export function FeedbackProvider({ children }) {
                 />
               )}
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-2 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => closeDialog(dialog.mode === 'prompt' ? null : false)}
-                  className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition-colors"
+                  className="w-full sm:w-auto px-4 py-2.5 sm:py-2 rounded-xl border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition-colors"
                 >
                   {dialog.cancelLabel}
                 </button>
                 <button
                   type="button"
                   onClick={() => closeDialog(dialog.mode === 'prompt' ? promptValue : true)}
-                  className={`px-4 py-2 rounded-xl text-white text-xs font-semibold transition-colors ${
+                  className={`w-full sm:w-auto px-4 py-2.5 sm:py-2 rounded-xl text-white text-xs font-semibold transition-colors ${
                     dialog.tone === 'danger'
                       ? 'bg-rose-600 hover:bg-rose-500'
                       : 'bg-sky-700 hover:bg-sky-600'

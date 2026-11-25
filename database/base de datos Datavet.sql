@@ -49,7 +49,8 @@ CREATE TABLE IF NOT EXISTS `roles` (
 INSERT INTO `roles` (`id_rol`, `nombre_rol`, `descripcion`) VALUES
 	(1, 'Administrador', 'Gestion completa del sistema'),
 	(2, 'Recepcionista', 'Gestion de clientes, mascotas y citas'),
-	(3, 'Veterinario', 'Atencion clinica y gestion medica');
+	(3, 'Veterinario', 'Atencion clinica y gestion medica'),
+	(4, 'Cliente', 'Propietario de mascotas con acceso al portal');
 
 -- 2. Tabla datavet.usuarios
 CREATE TABLE IF NOT EXISTS `usuarios` (
@@ -98,6 +99,7 @@ INSERT INTO `veterinarios` (`id_veterinario`, `id_usuario`, `colegiado`, `especi
 -- 4. Tabla datavet.clientes
 CREATE TABLE IF NOT EXISTS `clientes` (
   `id_cliente` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `id_usuario` int(10) unsigned DEFAULT NULL,
   `nombre` varchar(100) NOT NULL,
   `apellido` varchar(100) NOT NULL,
   `email` varchar(190) DEFAULT NULL,
@@ -107,8 +109,10 @@ CREATE TABLE IF NOT EXISTS `clientes` (
   `activo` tinyint(1) NOT NULL DEFAULT 1,
   `cedula` varchar(20) NOT NULL,
   PRIMARY KEY (`id_cliente`),
+  UNIQUE KEY `uq_clientes_usuario` (`id_usuario`),
   KEY `idx_clientes_nombre` (`apellido`,`nombre`),
-  KEY `idx_clientes_telefono` (`telefono`)
+  KEY `idx_clientes_telefono` (`telefono`),
+  CONSTRAINT `fk_clientes_usuarios` FOREIGN KEY (`id_usuario`) REFERENCES `usuarios` (`id_usuario`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `clientes` (`id_cliente`, `nombre`, `apellido`, `email`, `telefono`, `direccion`, `fecha_registro`, `activo`, `cedula`) VALUES
