@@ -3,6 +3,12 @@ import * as citasRepository from './citas.repository.js';
 
 export const listarCitas = citasRepository.listar;
 
+export async function obtenerCitaPorId(id) {
+  const cita = await citasRepository.buscarPorId(id);
+  if (!cita) throw new NotFoundError('La cita especificada no existe.');
+  return cita;
+}
+
 export async function crearCita(payload) {
   const duracion = payload.duracion_min || 30;
   const solapadaVet = await citasRepository.buscarSolapada(payload.usuario_id, payload.fecha_hora, duracion);

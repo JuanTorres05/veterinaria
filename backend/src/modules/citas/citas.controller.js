@@ -12,6 +12,19 @@ export async function listar(req, res, next) {
   }
 }
 
+export async function obtenerPorId(req, res, next) {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || id < 1) {
+      return res.status(400).json({ message: 'El ID de cita no es válido.' });
+    }
+    const result = await citasService.obtenerCitaPorId(id);
+    return res.json(result);
+  } catch (err) {
+    return next(err);
+  }
+}
+
 export async function crear(req, res, next) {
   try {
     const payload = crearCitaSchema.parse(req.body);

@@ -709,12 +709,22 @@ export default function FichaMascotaPage() {
               </p>
             </div>
           </div>
-          <Link
-            to="/agenda"
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold shadow-xs transition-all">
-            <Stethoscope size={15} weight="bold" />
-            <span>Ir a Agenda para Atender Cita</span>
-          </Link>
+          {user?.rol === 'admin' || user?.rol === 'veterinario' ? (
+            <Link
+              to={`/atender/${citasPendientes[0].id}`}
+              state={{ from: `/mascotas/${id}` }}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold shadow-xs transition-all">
+              <Stethoscope size={15} weight="bold" />
+              <span>Abrir Espacio de Consulta</span>
+            </Link>
+          ) : (
+            <Link
+              to="/agenda"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold shadow-xs transition-all">
+              <Stethoscope size={15} weight="bold" />
+              <span>Ir a Agenda</span>
+            </Link>
+          )}
         </div>
       )}
 

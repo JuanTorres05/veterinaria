@@ -37,9 +37,11 @@ export default function Layout() {
   const mainLinks = NAV_ITEMS.filter((item) => item.roles.includes(user?.rol));
 
   // Obtener el módulo activo actual para mostrar en la cabecera
-  const currentModule = NAV_ITEMS.find((item) => 
-    location.pathname === item.to || location.pathname.startsWith(item.to + "/")
-  )?.label || "Panel Clínico";
+  const currentModule = location.pathname.startsWith("/atender/")
+    ? "Espacio de Consulta Clínica"
+    : NAV_ITEMS.find((item) =>
+        location.pathname === item.to || location.pathname.startsWith(item.to + "/")
+      )?.label || "Panel Clínico";
 
   return (
     <div className="flex h-screen overflow-hidden antialiased bg-slate-50 text-slate-900">

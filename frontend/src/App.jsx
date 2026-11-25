@@ -14,6 +14,7 @@ import ReportesPage from './pages/ReportesPage';
 import MonitoreoPage from './pages/MonitoreoPage';
 import HospitalizacionPage from './pages/HospitalizacionPage';
 import UsuariosPage from './pages/UsuariosPage';
+import AtenderCitaPage from './pages/AtenderCitaPage';
 
 export default function App() {
   return (
@@ -39,6 +40,14 @@ export default function App() {
             <Route path="/monitoreo" element={<MonitoreoPage />} />
             <Route path="/hospitalizacion" element={<HospitalizacionPage />} />
             <Route path="/mascotas/:id" element={<FichaMascotaPage />} />
+            <Route
+              path="/atender/:citaId"
+              element={
+                <PrivateRoute roles={['admin', 'veterinario']}>
+                  <AtenderCitaPage />
+                </PrivateRoute>
+              }
+            />
             <Route
               path="/registrar"
               element={

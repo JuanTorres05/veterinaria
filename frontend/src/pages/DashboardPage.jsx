@@ -15,13 +15,13 @@ const ROL_CONFIG = {
 
 const ROL_ACCESOS = {
   admin: [
-    { to: "/registrar", icon: Plus,          label: "Registrar Paciente", desc: "Alta de nuevo propietario y su mascota en el sistema.",            btnLabel: "Nuevo Registro",  actionClass: "bg-sky-600 hover:bg-sky-700" },
+    { to: "/registrar", icon: Plus,          label: "Registrar Paciente", desc: "Registra un nuevo propietario junto con sus mascotas e historia clínica.", btnLabel: "Nuevo Registro",  actionClass: "bg-sky-600 hover:bg-sky-700" },
     { to: "/agenda",    icon: CalendarBlank, label: "Agenda de Citas",    desc: "Gestionar consultas médicas, estados y programación diaria.",      btnLabel: "Ver Agenda",     actionClass: "bg-emerald-600 hover:bg-emerald-700" },
     { to: "/pacientes", icon: ClipboardText, label: "Buscar Paciente",    desc: "Consultar expedientes, datos de contacto e historias clínicas.",    btnLabel: "Ver Pacientes",  actionClass: "bg-slate-800 hover:bg-slate-900" },
     { to: "/reportes",  icon: ChartBar,      label: "Reportes Clínicos",  desc: "Métricas del sistema, citas atendidas y estadísticas operativas.",  btnLabel: "Ver Reportes",   actionClass: "bg-cyan-700 hover:bg-cyan-800" },
   ],
   recepcionista: [
-    { to: "/registrar", icon: Plus,          label: "Registrar Paciente", desc: "Alta de nuevo propietario y su mascota en el sistema.",         btnLabel: "Nuevo Registro", actionClass: "bg-sky-600 hover:bg-sky-700" },
+    { to: "/registrar", icon: Plus,          label: "Registrar Paciente", desc: "Registra un nuevo propietario junto con sus mascotas e historia clínica.", btnLabel: "Nuevo Registro", actionClass: "bg-sky-600 hover:bg-sky-700" },
     { to: "/agenda",    icon: CalendarBlank, label: "Agenda de Citas",    desc: "Gestionar consultas médicas, estados y programación diaria.",   btnLabel: "Ver Agenda",     actionClass: "bg-emerald-600 hover:bg-emerald-700" },
     { to: "/pacientes", icon: ClipboardText, label: "Buscar Paciente",    desc: "Consultar expedientes, datos de contacto e historias clínicas.", btnLabel: "Ver Pacientes",  actionClass: "bg-slate-800 hover:bg-slate-900" },
   ],

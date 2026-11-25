@@ -21,6 +21,14 @@ router.get(
   citasController.dashboardStats
 );
 
+// GET /api/citas/:id
+// Obtener detalle de una cita específica para el espacio de atención clínica
+router.get(
+  '/:id',
+  requireAuth,
+  citasController.obtenerPorId
+);
+
 
 // POST /api/citas
 // Crear una nueva cita

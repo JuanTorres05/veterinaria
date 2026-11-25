@@ -386,14 +386,14 @@ export default function RegistrarPage() {
     setErrors(e => ({ ...e, mascotas: [...e.mascotas, {}] }));
   }
 
-  /* Confirmación de acción destructiva antes de eliminar una mascota del formulario */
+  /* Confirmación de acción destructiva antes de quitar una mascota del formulario */
   async function removeMascota(index) {
     if (form.mascotas.length <= 1) return;
     const petName = form.mascotas[index]?.nombre.trim() || `Mascota #${index + 1}`;
     const ok = await confirm({
-      title: "Remover mascota",
-      message: `¿Confirma que desea remover a ${petName} de la lista de registro?`,
-      confirmLabel: "Remover",
+      title: "Quitar mascota",
+      message: `¿Confirma que desea quitar a ${petName} de este registro?`,
+      confirmLabel: "Quitar",
       tone: "danger",
     });
     if (ok) {
@@ -427,7 +427,7 @@ export default function RegistrarPage() {
 
   function goBack() { setStep(s => Math.max(s - 1, 1)); }
 
-  function resetWizard() {
+  function resetRegistro() {
     setForm(FORM_INIT);
     setErrors({ cliente: {}, mascotas: [{}] });
     setSuccessData(null);
@@ -482,10 +482,10 @@ export default function RegistrarPage() {
         </div>
         <div>
           <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">
-            Wizard de Registro
+            Registro de Propietario y Mascotas
           </h1>
           <p className="text-xs font-medium text-slate-500">
-            Alta de propietario y mascotas en una sola transacción clínica
+            Ingresa los datos del propietario y sus mascotas para abrir su historia clínica
           </p>
         </div>
       </div>
@@ -510,7 +510,7 @@ export default function RegistrarPage() {
               ¡Registro Completado Exitosamente!
             </h2>
             <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto leading-relaxed">
-              El propietario <strong className="text-slate-900">{successData?.cliente?.nombre}</strong> y su(s) mascota(s) <strong className="text-slate-900">{successData?.mascotas?.map(m => m.nombre).join(", ")}</strong> quedaron dados de alta correctamente en el sistema.
+              El propietario <strong className="text-slate-900">{successData?.cliente?.nombre}</strong> y su(s) mascota(s) <strong className="text-slate-900">{successData?.mascotas?.map(m => m.nombre).join(", ")}</strong> quedaron registrados correctamente con su historia clínica abierta.
             </p>
           </div>
 
@@ -523,15 +523,15 @@ export default function RegistrarPage() {
             </Link>
 
             <button 
-              onClick={resetWizard} 
+              onClick={resetRegistro} 
               className="btn-action-secondary">
               <Plus size={16} weight="bold" />
-              <span>Registrar Otro Cliente</span>
+              <span>Registrar Otro Propietario</span>
             </button>
           </div>
         </div>
       ) : (
-        /* Tarjeta del Wizard Form */
+        /* Tarjeta del Formulario por Pasos */
         <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
           <div className="p-6 border-b border-slate-100">
             <StepperHeader step={step} />
@@ -624,9 +624,9 @@ export default function RegistrarPage() {
                 <div className="flex items-center justify-between mb-2">
                   {/* Corregida concordancia singular/plural */}
                   <p className="text-xs font-extrabold uppercase tracking-wider text-slate-500">
-                    {form.mascotas.length} {form.mascotas.length === 1 ? "Mascota Registrada" : "Mascotas Registradas"}
+                    {form.mascotas.length} {form.mascotas.length === 1 ? "Mascota por registrar" : "Mascotas por registrar"}
                   </p>
-                  <span className="text-[10px] font-semibold text-slate-400">Máximo 10 por cliente</span>
+                  <span className="text-[10px] font-semibold text-slate-400">Máximo 10 por propietario</span>
                 </div>
 
                 {form.mascotas.map((mascota, i) => (

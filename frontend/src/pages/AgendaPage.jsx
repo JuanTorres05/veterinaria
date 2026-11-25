@@ -1,16 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useFeedback } from "../context/FeedbackContext";
 import api from "../services/api";
 import Spinner from "../components/Spinner";
-import RecetaFormSection from "../components/RecetaFormSection";
-import { formatBytes, leerArchivosParaSubida } from "../utils/archivos";
 import { 
   CalendarBlank, Plus, Trash, X, ArrowCounterClockwise, Check, 
   MagnifyingGlass, Stethoscope, Phone, User, Chat, WarningCircle, 
-  CheckCircle, Clock, ClipboardText, ArrowSquareOut, Scales,
-  UploadSimple, FilePdf
+  CheckCircle, Clock, ClipboardText, ArrowSquareOut
 } from "@phosphor-icons/react";
 
 function getEspecieEmoji(especie) {
@@ -48,6 +45,7 @@ const ESTADO_STYLES = {
 
 export default function AgendaPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const { notify, confirm, promptInput } = useFeedback();
   const isAdminOrRec = user?.rol === "admin" || user?.rol === "recepcionista";
   const canAtender   = user?.rol === "veterinario" || user?.rol === "admin";
@@ -87,21 +85,6 @@ export default function AgendaPage() {
   const filtroFechaRef = useRef(null);
   const modalFechaRef  = useRef(null);
   const modalHoraRef   = useRef(null);
-
-  // Estados para Modal de Atención Médica ("Atender Cita")
-  const [citaAtender,       setCitaAtender]       = useState(null);
-  const [sintomasInput,     setSintomasInput]     = useState("");
-  const [pesoInput,         setPesoInput]         = useState("");
-  const [diagnosticoInput,  setDiagnosticoInput]  = useState("");
-  const [tratamientoInput,  setTratamientoInput]  = useState("");
-  const [notasInput,        setNotasInput]        = useState("");
-  const [requiereHosp,      setRequiereHosp]      = useState(false);
-  const [recetaMeds,        setRecetaMeds]        = useState([]);
-  const [indicacionesReceta,setIndicacionesReceta]= useState("");
-  const [archivosInput,     setArchivosInput]     = useState([]);
-  const [atencionError,     setAtencionError]     = useState("");
-  const [guardandoAtencion, setGuardandoAtencion] = useState(false);
-  const atenderFileRef = useRef(null);
 
   function openPicker(ref) {
     if (!ref?.current) return;
@@ -208,100 +191,7 @@ export default function AgendaPage() {
   };
 
   const openAtenderModal = (cita) => {
-    setCitaAtender(cita);
-    setSintomasInput(cita.motivo || "");
-    setPesoInput("");
-    setDiagnosticoInput("");
-    setTratamientoInput("");
-    setNotasInput("");
-    setRequiereHosp(false);
-    setRecetaMeds([]);
-    setIndicacionesReceta("");
-    setArchivosInput([]);
-    setAtencionError("");
-  };
-
-  const handleSelectArchivosAtender = async (e) => {
-    try {
-      const nuevos = await leerArchivosParaSubida(e.target.files);
-      setArchivosInput((prev) => [...prev, ...nuevos].slice(0, 10));
-      setAtencionError("");
-    } catch (err) {
-      setAtencionError(err.message);
-    } finally {
-      e.target.value = "";
-    }
-  };
-
-  const closeAtenderModal = () => {
-    if (guardandoAtencion) return;
-    setCitaAtender(null);
-    setAtencionError("");
-  };
-
-  const handleAtenderSubmit = async (e) => {
-    e.preventDefault();
-    if (!citaAtender) return;
-
-    if (!sintomasInput.trim() || sintomasInput.trim().length < 3) {
-      return setAtencionError("Los síntomas o motivo de consulta deben tener al menos 3 caracteres.");
-    }
-    if (!diagnosticoInput.trim() || diagnosticoInput.trim().length < 3) {
-      return setAtencionError("El diagnóstico médico es obligatorio (mínimo 3 caracteres).");
-    }
-    if (!tratamientoInput.trim() || tratamientoInput.trim().length < 3) {
-      return setAtencionError("El tratamiento o prescripción es obligatorio (mínimo 3 caracteres).");
-    }
-
-    if (recetaMeds.some((m) => !m.id_medicamento || !m.dosis.trim())) {
-      return setAtencionError("Completa el medicamento y la dosis en cada fila de la receta (o quita las filas vacías).");
-    }
-
-    const tzOffset = new Date().getTimezoneOffset() * 60000;
-    const localISOTime = new Date(Date.now() - tzOffset).toISOString().slice(0, 19);
-
-    try {
-      setGuardandoAtencion(true);
-      setAtencionError("");
-      await api.post(`/mascotas/${citaAtender.mascota_id}/historial`, {
-        cita_id: citaAtender.id,
-        fecha: localISOTime,
-        motivo: sintomasInput.trim(),
-        diagnostico: diagnosticoInput.trim(),
-        tratamiento: tratamientoInput.trim(),
-        notas: notasInput.trim() || null,
-        peso_kg: pesoInput !== "" ? Number(pesoInput) : null,
-        requiere_hospitalizacion: requiereHosp,
-        receta: recetaMeds.length > 0
-          ? {
-              indicaciones_generales: indicacionesReceta.trim() || null,
-              medicamentos: recetaMeds.map((m) => ({
-                id_medicamento: Number(m.id_medicamento),
-                dosis: m.dosis.trim(),
-                frecuencia: m.frecuencia.trim() || null,
-                duracion: m.duracion.trim() || null,
-                instrucciones: m.instrucciones.trim() || null,
-              })),
-            }
-          : null,
-        archivos: archivosInput,
-      });
-
-      const mascotaAtendida = citaAtender.mascota_nombre;
-      const mascotaId = citaAtender.mascota_id;
-      setCitaAtender(null);
-      loadCitas();
-      showSuccess({
-        tipo: "atencion",
-        mascota: mascotaAtendida,
-        mascotaId,
-        diagnostico: diagnosticoInput.trim(),
-      });
-    } catch (err) {
-      setAtencionError(err.response?.data?.message || "Error al registrar la consulta clínica.");
-    } finally {
-      setGuardandoAtencion(false);
-    }
+    navigate(`/atender/${cita.id}`, { state: { cita, from: "/agenda" } });
   };
 
   const handleBook = async (e) => {
@@ -1072,267 +962,6 @@ export default function AgendaPage() {
                     <>
                       <Check size={16} weight="bold" />
                       <span>Confirmar y Agendar Cita</span>
-                    </>
-                  )}
-                </button>
-              </div>
-
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ── MODAL "ATENDER CITA MÉDICA" — Formulario de Registro Clínico ── */}
-      {citaAtender && (
-        <div className="fixed inset-0 bg-slate-950/75 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="w-full max-w-2xl rounded-2xl border border-slate-800 bg-[#0F172A] text-slate-100 shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
-
-            {/* Cabecera del Modal */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/90 flex-shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold shadow-sm">
-                  <Stethoscope size={20} weight="bold" />
-                </div>
-                <div>
-                  <h2 className="font-extrabold text-base text-white tracking-tight">
-                    Atención Médica y Registro Clínico
-                  </h2>
-                  <p className="text-xs text-slate-400">
-                    Cita #{citaAtender.id} • {formatTime(citaAtender.fecha_hora)} • Dr(a). {citaAtender.veterinario_nombre}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={closeAtenderModal}
-                className="w-8 h-8 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 flex items-center justify-center transition-all">
-                <X size={18} weight="bold" />
-              </button>
-            </div>
-
-            {/* Cuerpo del Formulario Clínico */}
-            <form onSubmit={handleAtenderSubmit} className="p-6 space-y-4 overflow-y-auto">
-
-              {/* Resumen del Paciente y Propietario */}
-              <div className="flex items-center justify-between flex-wrap gap-3 p-3.5 rounded-xl border border-slate-800 bg-slate-900/70">
-                <div className="flex items-center gap-3">
-                  <div className="w-11 h-11 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-2xl">
-                    {getEspecieEmoji(citaAtender.especie)}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-extrabold text-sm text-white">{citaAtender.mascota_nombre}</span>
-                      <span className="px-2 py-0.5 rounded-md bg-sky-500/20 border border-sky-500/30 text-sky-300 text-[10px] font-bold uppercase">
-                        {citaAtender.especie}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      Propietario: <strong className="text-slate-200">{citaAtender.cliente_nombre}</strong>
-                      {citaAtender.telefono ? ` • Tel: ${citaAtender.telefono}` : ""}
-                    </p>
-                  </div>
-                </div>
-
-                <Link
-                  to={`/mascotas/${citaAtender.mascota_id}`}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 text-sky-300 text-xs font-bold transition-all">
-                  <ClipboardText size={15} weight="bold" />
-                  <span>Ver Expediente Completo</span>
-                </Link>
-              </div>
-
-              {/* Alerta de Error */}
-              {atencionError && (
-                <div className="flex items-center gap-2.5 p-3.5 rounded-xl border border-rose-500/30 bg-rose-950/40 text-rose-300 text-xs font-semibold">
-                  <WarningCircle size={18} weight="bold" className="flex-shrink-0 text-rose-400" />
-                  <span>{atencionError}</span>
-                </div>
-              )}
-
-              {/* Fila 1: Síntomas / Motivo y Peso Actual */}
-              <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-                <div className="sm:col-span-8">
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
-                    Síntomas / Motivo de Consulta <span className="text-rose-400">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={sintomasInput}
-                    onChange={e => setSintomasInput(e.target.value)}
-                    placeholder="Síntomas presentados o motivo de la atención..."
-                    className="w-full h-11 px-3.5 rounded-xl border border-slate-700 bg-slate-900 text-white placeholder-slate-500 text-xs font-medium focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-                <div className="sm:col-span-4">
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
-                    Peso en Consulta (kg)
-                  </label>
-                  <div className="relative">
-                    <Scales size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input
-                      type="number"
-                      step="0.1"
-                      min="0.1"
-                      max="500"
-                      value={pesoInput}
-                      onChange={e => setPesoInput(e.target.value)}
-                      placeholder="Ej. 12.5"
-                      className="w-full h-11 pl-9 pr-3.5 rounded-xl border border-slate-700 bg-slate-900 text-white placeholder-slate-500 text-xs font-medium focus:outline-none focus:border-emerald-500"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Fila 2: Diagnóstico Médico (*) */}
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
-                  Diagnóstico Médico <span className="text-rose-400">*</span>
-                </label>
-                <textarea
-                  rows="2"
-                  value={diagnosticoInput}
-                  onChange={e => setDiagnosticoInput(e.target.value)}
-                  placeholder="Describa el diagnóstico clínico o hallazgos del examen físico..."
-                  className="w-full p-3.5 rounded-xl border border-slate-700 bg-slate-900 text-white placeholder-slate-500 text-xs font-medium focus:outline-none focus:border-emerald-500 resize-none"
-                />
-              </div>
-
-              {/* Fila 3: Tratamiento y Prescripción (*) */}
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
-                  Tratamiento y Medicación Aplicada / Recetada <span className="text-rose-400">*</span>
-                </label>
-                <textarea
-                  rows="3"
-                  value={tratamientoInput}
-                  onChange={e => setTratamientoInput(e.target.value)}
-                  placeholder="Indique los medicamentos, dosis, frecuencia, procedimientos realizados o plan terapéutico..."
-                  className="w-full p-3.5 rounded-xl border border-slate-700 bg-slate-900 text-white placeholder-slate-500 text-xs font-medium focus:outline-none focus:border-emerald-500 resize-none"
-                />
-              </div>
-
-              {/* Fila 4: Observaciones y Recomendaciones (Opcional) */}
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
-                  Observaciones Clínicas / Recomendaciones al Propietario
-                </label>
-                <textarea
-                  rows="2"
-                  value={notasInput}
-                  onChange={e => setNotasInput(e.target.value)}
-                  placeholder="Signos vitales adicionales, cuidados en casa, próximo control sugerido (opcional)..."
-                  className="w-full p-3.5 rounded-xl border border-slate-700 bg-slate-900 text-white placeholder-slate-500 text-xs font-medium focus:outline-none focus:border-emerald-500 resize-none"
-                />
-              </div>
-
-              {/* Receta Médica Estructurada */}
-              <RecetaFormSection
-                recetaMeds={recetaMeds}
-                setRecetaMeds={setRecetaMeds}
-                indicacionesReceta={indicacionesReceta}
-                setIndicacionesReceta={setIndicacionesReceta}
-              />
-
-              {/* Opción de Hospitalización */}
-              <label className="flex items-start gap-3 p-3.5 rounded-xl border border-slate-700 bg-slate-900/80 cursor-pointer hover:border-sky-500/60 transition-colors">
-                <input
-                  type="checkbox"
-                  checked={requiereHosp}
-                  onChange={(e) => setRequiereHosp(e.target.checked)}
-                  className="mt-0.5 w-4 h-4 rounded accent-sky-500"
-                />
-                <div>
-                  <span className="text-xs font-bold text-white block">
-                    Requiere hospitalización / internación
-                  </span>
-                  <span className="text-[11px] text-slate-400">
-                    Ingresará automáticamente al módulo de Hospitalización vinculado a esta consulta.
-                  </span>
-                </div>
-              </label>
-
-              {/* Fila 5: Adjuntar Fotos o PDFs al Historial Clínico */}
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
-                  Adjuntar Fotos o PDFs al Historial Clínico (Opcional)
-                </label>
-                <div
-                  onClick={() => atenderFileRef.current?.click()}
-                  className="border-2 border-dashed border-slate-700 hover:border-sky-500 rounded-xl p-3.5 bg-slate-900/60 text-center cursor-pointer transition-colors">
-                  <div className="flex items-center justify-center gap-2 text-sky-400 font-bold text-xs">
-                    <UploadSimple size={17} weight="bold" />
-                    <span>Seleccionar fotos (JPG, PNG, WEBP) o documentos PDF</span>
-                  </div>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    Exámenes de laboratorio, radiografías, ecografías o fotografías clínicas
-                  </p>
-                  <input
-                    ref={atenderFileRef}
-                    type="file"
-                    multiple
-                    accept="image/jpeg,image/png,image/webp,image/gif,application/pdf"
-                    onChange={handleSelectArchivosAtender}
-                    className="hidden"
-                  />
-                </div>
-
-                {archivosInput.length > 0 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2.5">
-                    {archivosInput.map((arch, idx) => (
-                      <div
-                        key={`${arch.nombre_archivo}-${idx}`}
-                        className="flex items-center justify-between gap-2 p-2 rounded-xl border border-slate-700 bg-slate-900">
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          {arch.esImagen ? (
-                            <img
-                              src={arch.base64_data}
-                              alt={arch.nombre_archivo}
-                              className="w-9 h-9 rounded-lg object-cover border border-slate-700 flex-shrink-0"
-                            />
-                          ) : (
-                            <div className="w-9 h-9 rounded-lg bg-rose-500/20 border border-rose-500/30 text-rose-400 flex items-center justify-center flex-shrink-0">
-                              <FilePdf size={18} weight="fill" />
-                            </div>
-                          )}
-                          <div className="min-w-0">
-                            <p className="text-xs font-bold text-white truncate">{arch.nombre_archivo}</p>
-                            <p className="text-[10px] text-slate-400">{formatBytes(arch.tamano_bytes)}</p>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setArchivosInput((prev) => prev.filter((_, i) => i !== idx))}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800">
-                          <X size={14} weight="bold" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Botones de Acción */}
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={closeAtenderModal}
-                  disabled={guardandoAtencion}
-                  className="px-4 py-2.5 h-11 rounded-xl font-bold text-xs text-slate-300 hover:text-white border border-slate-700 hover:bg-slate-800 transition-all">
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={guardandoAtencion}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 h-11 rounded-xl font-extrabold text-xs bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-950/50 transition-all active:scale-95 disabled:opacity-50">
-                  {guardandoAtencion ? (
-                    <>
-                      <Spinner size="sm" />
-                      <span>Guardando Consulta...</span>
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle size={17} weight="bold" />
-                      <span>Finalizar Atención y Guardar en Historia Clínica</span>
                     </>
                   )}
                 </button>

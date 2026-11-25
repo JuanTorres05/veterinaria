@@ -9,6 +9,7 @@
     "start": "node src/server.js",
     "setup": "node scripts/setup.js",
     "seed": "node scripts/seed.js",
+    "seed:6meses": "node scripts/seed-6-meses.js",
     "db:create": "node scripts/create-db.js",
     "db:init": "node scripts/init-cloud-db.js"
   },
